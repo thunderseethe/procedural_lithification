@@ -2,7 +2,8 @@ use amethyst::core::nalgebra::Point3;
 use noise::{NoiseFn, SuperSimplex};
 use rayon::prelude::*;
 
-use crate::chunk::Chunk;
+use crate::chunk::{Chunk, DIRT_BLOCK};
+use crate::octree::Octree;
 
 struct Terrain {
     simplex: SuperSimplex,
@@ -15,12 +16,10 @@ impl Terrain {
         }
     }
 
-    fn generate_chunk<R>(&self) -> Chunk,
-    {
-        let mut chunk = Chunk::default();
-        let xs = (0i32..256).into_par_iter();
-        let ys = (0i32..256).into_par_iter();
-        let zs = (0i32..256).into_par_iter();
+    fn generate_chunk<R>(&self) -> Chunk {
+        let xs = (1u16..256).into_par_iter();
+        let ys = (1u16..256).into_par_iter();
+        let zs = (1u16..256).into_par_iter();
         xs.zip(ys)
             .zip(zs)
             .map(|((x, y), z)| {
@@ -29,10 +28,10 @@ impl Terrain {
                     self.simplex.get([x as f64, y as f64, z as f64]),
                 )
             })
-            .filter_map(|(pos, e)| if e > 0.5 { None } else { Some((pos, 1234)) })
-            .fold(
-                || Chunk::default(),
-                |(chunk, (pos, block))| chunk.place_block(pos, block),
-            )
+            .map(|(pos, e)| {
+                let data = if e > 0.5 { Some(DIRT_BLOCK) } else { None };
+                Octree::new(pos, data, 0)
+            });
+        Chunk::default()
     }
 }

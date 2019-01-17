@@ -39,8 +39,8 @@ impl<E> OctreeData<E> {
     }
 }
 
-// Alias to allow for easy swapping of this type.
-pub type Number = i32;
+// Alias to allow for easy swapping of position type.
+pub type Number = u16;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OctantDimensions {
@@ -214,10 +214,19 @@ where
 }
 
 impl<E: PartialEq> Octree<E> {
-    pub fn new(power_of_2: u32) -> Self {
+    pub fn new(pos: Point3<Number>, opt: Option<E>, height: u32) -> Self {
+        let data = opt.map_or(Empty, |elem| Leaf(Arc::new(elem)));
+        Octree {
+            data,
+            bounds: OctantDimensions::new(pos, Number::pow(2, height)),
+            height: height as usize,
+        }
+    }
+
+    pub fn with_root_default(power_of_2: u32) -> Self {
         let diameter: Number = Number::pow(2, power_of_2);
-        let radius = diameter / 2;
-        let bounds = OctantDimensions::new(Point3::new(radius, radius, radius), diameter);
+        //let radius = diameter / 2;
+        let bounds = OctantDimensions::new(Point3::new(diameter, diameter, diameter), diameter);
         Octree {
             data: Empty,
             bounds: bounds,
@@ -376,12 +385,8 @@ impl<E: PartialEq> Octree<E> {
         P: Borrow<Point3<Number>>,
     {
         let pos = pos_ref.borrow();
-        let rel = pos - self.bounds.center();
-        match (
-            rel.x.is_positive(),
-            rel.y.is_positive(),
-            rel.z.is_positive(),
-        ) {
+        let center = self.bounds.center();
+        match (pos.x > center.x, pos.y > center.y, pos.z > center.z) {
             (true, true, true) => HighHighHigh,
             (true, true, false) => HighHighLow,
             (true, false, true) => HighLowHigh,
@@ -432,7 +437,7 @@ mod test {
             octree,
             Octree {
                 data: Empty,
-                bounds: OctantDimensions::new(Point3::new(128, 128, 128), 256),
+                bounds: OctantDimensions::new(Point3::new(256, 256, 256), 256),
                 height: 8
             }
         );
@@ -453,34 +458,53 @@ mod test {
     #[test]
     fn octree_creates_dimensions() {
         let octree: Octree<()> = Octree::new(8);
-        assert_eq!(octree.bounds.x_max(), 128);
-        assert_eq!(octree.bounds.x_min(), -128);
-        assert_eq!(octree.bounds.y_max(), 128);
-        assert_eq!(octree.bounds.y_min(), -128);
-        assert_eq!(octree.bounds.z_max(), 128);
-        assert_eq!(octree.bounds.z_min(), -128);
-        assert_eq!(octree.bounds.center(), Point3::new(0, 0, 0));
+        assert_eq!(octree.bounds.x_max(), 256);
+        assert_eq!(octree.bounds.x_min(), 0);
+        assert_eq!(octree.bounds.y_max(), 256);
+        assert_eq!(octree.bounds.y_min(), 0);
+        assert_eq!(octree.bounds.z_max(), 256);
+        assert_eq!(octree.bounds.z_min(), 0);
+        assert_eq!(octree.bounds.center(), Point3::new(128, 128, 128));
     }
 
     #[test]
     fn octree_subnodes_constructed_correctly() {
         let octree: Octree<i32> = Octree::new(1);
 
-        assert_eq!(octree.outside_bounds(Point3::new(-1, 1, 1)), true);
-        assert_eq!(octree.outside_bounds(Point3::new(1, -1, 1)), true);
-        assert_eq!(octree.outside_bounds(Point3::new(1, 1, -1)), true);
-        assert_eq!(octree.outside_bounds(Point3::new(2, 0, 0)), true);
-        assert_eq!(octree.outside_bounds(Point3::new(0, 2, 2)), true);
-        assert_eq!(octree.outside_bounds(Point3::new(0, 0, 1)), false);
-        assert_eq!(octree.outside_bounds(Point3::new(1, 1, 0)), false);
+        let points = vec![
+            (Point3::new(0, 0, 0), true),
+            (Point3::new(0, 0, 1), true),
+            (Point3::new(0, 1, 0), true),
+            (Point3::new(0, 1, 1), true),
+            (Point3::new(1, 0, 0), true),
+            (Point3::new(1, 0, 1), true),
+            (Point3::new(1, 1, 0), true),
+            (Point3::new(1, 1, 1), false),
+            (Point3::new(1, 1, 2), false),
+            (Point3::new(1, 2, 1), false),
+            (Point3::new(1, 2, 2), false),
+            (Point3::new(2, 1, 1), false),
+            (Point3::new(2, 1, 2), false),
+            (Point3::new(2, 2, 1), false),
+            (Point3::new(2, 2, 2), false),
+            (Point3::new(2, 2, 3), true),
+            (Point3::new(2, 3, 2), true),
+            (Point3::new(2, 3, 3), true),
+        ];
+        for (p, expected) in points {
+            assert_eq!(octree.outside_bounds(p), expected, "{:?}", p);
+        }
     }
 
     #[test]
-    fn octree_insert_handles_origin_point() {
-        let p = Point3::new(0, 0, 0);
-        let octree: Octree<i32> = Octree::new(4).insert(&p, 1234);
+    fn octree_insert_handles_center_point() {
+        let octree: Octree<i32> = Octree::new(4);
+        let center = octree.bounds.center();
 
-        assert_eq!(octree.get(&p), Some(Arc::new(1234)));
+        assert_eq!(
+            octree.insert(&center, 1234).get(&center),
+            Some(Arc::new(1234))
+        );
     }
 
     #[test]
@@ -496,7 +520,7 @@ mod test {
     #[test]
     fn octree_element_retrieved_after_inserterion_in_diff_octants() {
         let p1 = Point3::new(1, 1, 1);
-        let p2 = Point3::new(-1, -1, -1);
+        let p2 = Point3::new(7, 7, 7);
         let octree: Octree<i32> = Octree::new(3).insert(&p1, 1234).insert(&p2, 5678);
 
         assert_eq!(octree.get(&p1), Some(Arc::new(1234)));
@@ -505,7 +529,7 @@ mod test {
 
     #[test]
     fn octree_insert_updates_element() {
-        let p = Point3::new(0, 0, 0);
+        let p = Point3::new(1, 1, 1);
         let octree: Octree<i32> = Octree::new(4).insert(&p, 1234);
 
         assert_eq!(octree.get(&p), Some(Arc::new(1234)));
@@ -517,18 +541,18 @@ mod test {
     #[test]
     fn octree_deletes_expected_element() {
         let octree: Octree<i32> = Octree::new(5)
-            .insert(Point3::new(0, 0, 0), 1234)
-            .insert(Point3::new(1, 1, 0), 4567)
-            .insert(Point3::new(-1, 0, 0), 7890);
+            .insert(Point3::new(1, 1, 1), 1234)
+            .insert(Point3::new(1, 1, 2), 4567)
+            .insert(Point3::new(4, 1, 1), 7890);
 
-        assert_eq!(octree.get(Point3::new(-1, 0, 0)), Some(Arc::new(7890)));
-        let octree = octree.delete(Point3::new(-1, 0, 0));
-        assert_eq!(octree.get(Point3::new(-1, 0, 0)), None);
+        assert_eq!(octree.get(Point3::new(4, 0, 0)), Some(Arc::new(7890)));
+        let octree = octree.delete(Point3::new(4, 0, 0));
+        assert_eq!(octree.get(Point3::new(4, 0, 0)), None);
     }
 
     #[test]
     fn octree_delete_is_idempotent() {
-        let p = Point3::new(0, 0, 0);
+        let p = Point3::new(1, 1, 1);
         let octree: Octree<i32> = Octree::new(5).insert(&p, 1234);
 
         let result = octree.delete(&p).delete(&p);
@@ -538,9 +562,9 @@ mod test {
     #[test]
     fn octree_iterator_length_is_correct() {
         let octree: Octree<i32> = Octree::new(5)
-            .insert(Point3::new(0, 0, 0), 1234)
-            .insert(Point3::new(1, 1, 0), 4567)
-            .insert(Point3::new(0, 1, 1), 7890);
+            .insert(Point3::new(2, 2, 2), 1234)
+            .insert(Point3::new(1, 1, 2), 4567)
+            .insert(Point3::new(2, 1, 1), 7890);
 
         assert_eq!(octree.iter().count(), 3);
     }
@@ -549,26 +573,26 @@ mod test {
     fn octree_iterator_contains_correct_elements() {
         let octree = Octree::new(3)
             .insert(Point3::new(2, 2, 2), 1)
-            .insert(Point3::new(-2, -2, 2), 2)
-            .insert(Point3::new(-2, -2, -2), 3)
-            .insert(Point3::new(2, 2, -2), 4);
+            .insert(Point3::new(2, 4, 2), 2)
+            .insert(Point3::new(4, 4, 4), 3)
+            .insert(Point3::new(2, 2, 4), 4);
         let mut iter = octree.iter();
 
         assert_eq!(
             iter.next(),
+            Some((&OctantDimensions::new(Point3::new(4, 4, 4), 1), &3))
+        );
+        assert_eq!(
+            iter.next(),
+            Some((&OctantDimensions::new(Point3::new(2, 4, 2), 1), &2))
+        );
+        assert_eq!(
+            iter.next(),
+            Some((&OctantDimensions::new(Point3::new(2, 2, 4), 1), &4))
+        );
+        assert_eq!(
+            iter.next(),
             Some((&OctantDimensions::new(Point3::new(2, 2, 2), 1), &1))
-        );
-        assert_eq!(
-            iter.next(),
-            Some((&OctantDimensions::new(Point3::new(2, 2, -2), 1), &4))
-        );
-        assert_eq!(
-            iter.next(),
-            Some((&OctantDimensions::new(Point3::new(-2, -2, 2), 1), &2))
-        );
-        assert_eq!(
-            iter.next(),
-            Some((&OctantDimensions::new(Point3::new(-2, -2, -2), 1), &3))
         );
         assert_eq!(iter.next(), None);
     }
@@ -576,20 +600,20 @@ mod test {
     #[test]
     fn octree_insertion_compresses_common_subnodes_in_single_level() {
         let octree = Octree::new(1)
-            .insert(Point3::new(1, 1, 1), 1)
-            .insert(Point3::new(1, 1, 0), 1)
-            .insert(Point3::new(1, 0, 1), 1)
-            .insert(Point3::new(0, 1, 0), 1)
-            .insert(Point3::new(0, 1, 1), 1)
-            .insert(Point3::new(1, 0, 0), 1)
-            .insert(Point3::new(0, 0, 1), 1)
-            .insert(Point3::new(0, 0, 0), 1);
+            .insert(Point3::new(2, 2, 2), 1)
+            .insert(Point3::new(2, 2, 1), 1)
+            .insert(Point3::new(2, 1, 2), 1)
+            .insert(Point3::new(1, 2, 1), 1)
+            .insert(Point3::new(1, 2, 2), 1)
+            .insert(Point3::new(2, 1, 1), 1)
+            .insert(Point3::new(1, 1, 2), 1)
+            .insert(Point3::new(1, 1, 1), 1);
 
         assert_eq!(
             octree,
             Octree {
                 data: Leaf(Arc::new(1)),
-                bounds: OctantDimensions::new(Point3::new(1, 1, 1), 2),
+                bounds: OctantDimensions::new(Point3::new(2, 2, 2), 2),
                 height: 1
             }
         );

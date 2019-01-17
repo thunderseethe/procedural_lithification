@@ -22,7 +22,7 @@ mod octree;
 mod systems;
 mod terrain;
 
-use crate::chunk::Chunk;
+use crate::chunk::{Chunk, Block};
 use crate::systems::{PlayerControlBundle, PlayerControlTag};
 
 fn create_cube(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, point: &Point3<i32>) {
@@ -49,18 +49,14 @@ fn create_cube(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, poi
 
 fn render_chunk(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, chunk: &Chunk) {
     for (pos, _) in chunk.iter() {
-        create_cube(world, mesh.clone(), texture, &pos);
+        let p = Point3::new(pos.x as i32, pos.y as i32, pos.z as i32);
+        create_cube(world, mesh.clone(), texture, &p);
     }
 }
 
 fn create_chunk() -> Chunk {
     Chunk::default()
-        .place_block(Point3::new(1, 0, 0), 0)
-        .place_block(Point3::new(0, 1, 0), 0)
-        .place_block(Point3::new(0, 0, 1), 0)
-        .place_block(Point3::new(0, 0, -1), 0)
-        .place_block(Point3::new(-1, 0, 0), 0)
-        .place_block(Point3::new(0, -1, 0), 0)
+        .place_block(Point3::new(2, 1, 1), 0)
 }
 
 struct Cubes;

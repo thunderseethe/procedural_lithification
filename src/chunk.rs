@@ -2,19 +2,19 @@ use crate::octree::*;
 use amethyst::core::nalgebra::Point3;
 use std::{borrow::Borrow, default::Default};
 
-type Block = u32;
+pub type Block = u32;
+pub static DIRT_BLOCK: Block = 1;
 
 #[derive(Debug)]
 pub struct Chunk {
     octree: Octree<Block>,
+    // check that boxes are placed at their top right corner.
 }
 
 impl Default for Chunk {
     fn default() -> Self {
-        Chunk {
-            // Default chunk size is 256 x 256 x 256
-            octree: Octree::new(8),
-        }
+        // Default chunk size is 256 x 256 x 256
+        Chunk::new(Octree::with_root_default(8))
     }
 }
 
@@ -25,7 +25,7 @@ impl Chunk {
 
     pub fn place_block<P>(&self, pos: P, block: Block) -> Self
     where
-        P: Borrow<Point3<i32>>,
+        P: Borrow<Point3<Number>>,
     {
         Chunk::new(self.octree.insert(pos, block))
     }
@@ -93,7 +93,7 @@ mod test {
     #[test]
     fn test_chunk_iterator() {
         let block = 1234;
-        let mut chunk = Chunk::new();
+        let mut chunk = Chunk::default();
         let chunk = chunk
             .place_block(Point3::new(1, 1, 1), block)
             .place_block(Point3::new(1, 1, 2), block)
