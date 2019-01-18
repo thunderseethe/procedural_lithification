@@ -14,7 +14,7 @@ pub struct Chunk {
 impl Default for Chunk {
     fn default() -> Self {
         // Default chunk size is 256 x 256 x 256
-        Chunk::new(Octree::with_root_default(8))
+        Chunk::new(Octree::with_uniform_dimension(8))
     }
 }
 

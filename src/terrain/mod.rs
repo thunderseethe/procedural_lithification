@@ -20,18 +20,12 @@ impl Terrain {
         let xs = (1u16..256).into_par_iter();
         let ys = (1u16..256).into_par_iter();
         let zs = (1u16..256).into_par_iter();
-        xs.zip(ys)
-            .zip(zs)
-            .map(|((x, y), z)| {
-                (
-                    Point3::new(x, y, z),
-                    self.simplex.get([x as f64, y as f64, z as f64]),
-                )
-            })
-            .map(|(pos, e)| {
-                let data = if e > 0.5 { Some(DIRT_BLOCK) } else { None };
-                Octree::new(pos, data, 0)
-            });
+        xs.zip(ys).zip(zs).map(|((x, y), z)| {
+            let pos = Point3::new(x, y, z);
+            let e = self.simplex.get([x as f64, y as f64, z as f64]);
+            let data = if e > 0.5 { Some(DIRT_BLOCK) } else { None };
+            Octree::new(pos, data, 0)
+        });
         Chunk::default()
     }
 }
