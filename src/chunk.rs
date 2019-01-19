@@ -23,11 +23,12 @@ impl Chunk {
         Chunk { octree }
     }
 
-    pub fn place_block<P>(&self, pos: P, block: Block) -> Self
+    pub fn place_block<P>(&mut self, pos: P, block: Block) -> &mut Self
     where
         P: Borrow<Point3<Number>>,
     {
-        Chunk::new(self.octree.insert(pos, block))
+        self.octree = self.octree.insert(pos, block);
+        self
     }
 
     pub fn iter<'a>(&'a self) -> ChunkIterator<'a> {
@@ -92,7 +93,8 @@ mod test {
 
     #[test]
     fn test_chunk_iterator() {
-        let chunk = Chunk::default()
+        let mut chunk = Chunk::default();
+        chunk
             .place_block(Point3::new(0, 0, 0), 1)
             .place_block(Point3::new(0, 0, 1), 2)
             .place_block(Point3::new(0, 1, 0), 3)
@@ -113,6 +115,23 @@ mod test {
         assert_eq!(iter.next(), Some((Point3::new(0, 0, 1), &2)));
         assert_eq!(iter.next(), Some((Point3::new(0, 0, 0), &1)));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_chunk_insertions() {
+        let mut chunk = Chunk::default();
+        for _ in 0..1000 {
+            chunk.place_block(
+                Point3::new(
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                ),
+                1234,
+            );
+        }
+
+        println!("{:?}", chunk);
     }
 
 }

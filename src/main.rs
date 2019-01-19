@@ -2,6 +2,7 @@ extern crate serde_derive;
 
 extern crate amethyst;
 extern crate noise;
+extern crate rand;
 extern crate rayon;
 extern crate serde;
 
@@ -16,28 +17,24 @@ use amethyst::{
     renderer::*,
     utils::application_root_dir,
 };
+use rand::prelude::*;
 
 mod chunk;
 mod octree;
 mod systems;
 mod terrain;
 
-use crate::chunk::{Chunk, Block};
+use crate::chunk::{Block, Chunk, DIRT_BLOCK};
 use crate::systems::{PlayerControlBundle, PlayerControlTag};
+use crate::terrain::Terrain;
 
-fn create_cube(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, point: &Point3<i32>) {
-    let mat_defaults = world.read_resource::<MaterialDefaults>().0.clone();
+fn create_cube(world: &mut World, mesh: MeshHandle, material: Material, point: &Point3<u16>) {
     let mut pos: Transform = Transform::default();
     pos.set_xyz(
         point.x as f32 * 2.0,
         point.y as f32 * 2.0,
         point.z as f32 * 2.0,
     );
-
-    let material = Material {
-        albedo: texture.clone(),
-        ..mat_defaults.clone()
-    };
 
     world
         .create_entity()
@@ -47,16 +44,10 @@ fn create_cube(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, poi
         .build();
 }
 
-fn render_chunk(world: &mut World, mesh: MeshHandle, texture: &TextureHandle, chunk: &Chunk) {
+fn render_chunk(world: &mut World, mesh: &MeshHandle, material: &Material, chunk: &Chunk) {
     for (pos, _) in chunk.iter() {
-        let p = Point3::new(pos.x as i32, pos.y as i32, pos.z as i32);
-        create_cube(world, mesh.clone(), texture, &p);
+        create_cube(world, mesh.clone(), material.clone(), &pos);
     }
-}
-
-fn create_chunk() -> Chunk {
-    Chunk::default()
-        .place_block(Point3::new(2, 1, 1), 0)
 }
 
 struct Cubes;
@@ -74,8 +65,26 @@ impl SimpleState for Cubes {
             loader.load("textures/dirt.png", PngFormat, TextureMetadata::srgb(), ())
         });
 
-        let chunk = create_chunk();
-        render_chunk(world, mesh.clone(), &albedo, &chunk);
+        let material = Material {
+            albedo: albedo,
+            ..world.read_resource::<MaterialDefaults>().0.clone()
+        };
+
+        //let terrain = Terrain::new();
+        //let chunk = terrain.generate_chunk();
+        let terrain = Terrain::new();
+        let mut chunk = Chunk::default();
+        for _ in 0..955 {
+            chunk.place_block(
+                Point3::new(
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                ),
+                DIRT_BLOCK,
+            );
+        }
+        render_chunk(world, &mesh, &material, &chunk);
 
         println!("Put camera");
 
@@ -117,7 +126,7 @@ fn main() -> amethyst::Result<()> {
                 Some(String::from("move_y")),
                 Some(String::from("move_z")),
             )
-            .with_speed(4.0)
+            .with_speed(10.0)
             .with_sensitivity(0.1, 0.1),
         )?
         .with_bundle(TransformBundle::new().with_dep(&["player_movement"]))?

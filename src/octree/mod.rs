@@ -1,7 +1,9 @@
 extern crate amethyst;
 extern crate array_init;
+extern crate num_traits;
 
 use amethyst::core::nalgebra::geometry::Point3;
+use num_traits::Num;
 use std::{
     borrow::Borrow,
     cmp::{Ord, Ordering, PartialOrd},
@@ -10,7 +12,7 @@ use std::{
 };
 
 #[derive(Debug)]
-enum OctreeData<E> {
+pub enum OctreeData<E> {
     Node([Arc<Octree<E>>; 8]),
     Leaf(Arc<E>),
     Empty,
@@ -87,6 +89,15 @@ impl OctantDimensions {
         }
     }
 
+    pub fn nearest_octant_point(p: Point3<Number>, height: u32) -> Point3<Number> {
+        let multiple = Number::pow(2, height);
+        let mut new_point = p.clone();
+        for e in new_point.iter_mut() {
+            *e = (*e as f32 / multiple as f32).floor() as Number * multiple;
+        }
+        return new_point;
+    }
+
     pub fn x_min(&self) -> Number {
         self.bottom_left.x
     }
@@ -132,7 +143,7 @@ impl OctantDimensions {
 pub struct Octree<E> {
     data: OctreeData<E>,
     bounds: OctantDimensions,
-    height: usize,
+    height: u32,
 }
 
 impl<E: PartialEq> PartialEq for Octree<E> {
@@ -166,20 +177,44 @@ enum Octant {
     LowLowLow,
 }
 
-impl Into<usize> for Octant {
-    fn into(self) -> usize {
-        match self {
-            HighHighHigh => 0,
-            HighHighLow => 1,
-            HighLowHigh => 2,
-            HighLowLow => 3,
-            LowHighHigh => 4,
-            LowHighLow => 5,
-            LowLowHigh => 6,
-            LowLowLow => 7,
-        }
-    }
+macro_rules! octant_num_conversions {
+    ($( $num:ty ),* ) => {
+        $(
+            impl Into<$num> for Octant {
+                fn into(self) -> $num {
+                    match self {
+                        HighHighHigh => 0,
+                        HighHighLow => 1,
+                        HighLowHigh => 2,
+                        HighLowLow => 3,
+                        LowHighHigh => 4,
+                        LowHighLow => 5,
+                        LowLowHigh => 6,
+                        LowLowLow => 7,
+                    }
+                }
+            }
+
+            impl From<$num> for Octant {
+                fn from(num: $num) -> Self {
+                    match num {
+                        0 => HighHighHigh,
+                        1 => HighHighLow,
+                        2 => HighLowHigh,
+                        3 => HighLowLow,
+                        4 => LowHighHigh,
+                        5 => LowHighLow,
+                        6 => LowLowHigh,
+                        7 => LowLowLow,
+                        _ => panic!("Tried to create more than 8 elements in an octree"),
+                    }
+                }
+            }
+        )*
+    };
 }
+
+octant_num_conversions!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
 
 use self::Octant::*;
 impl Octant {
@@ -250,7 +285,7 @@ impl<E: PartialEq> Octree<E> {
         Octree {
             data,
             bounds: OctantDimensions::new(pos, Number::pow(2, height)),
-            height: height as usize,
+            height: height,
         }
     }
 
@@ -261,8 +296,21 @@ impl<E: PartialEq> Octree<E> {
         Octree {
             data: Empty,
             bounds: bounds,
-            height: power_of_2 as usize,
+            height: power_of_2,
         }
+    }
+
+    pub fn with_children<I>(children: I, pos: Point3<Number>, height: u32) -> Self
+    where
+        I: Into<[Arc<Octree<E>>; 8]>,
+    {
+        let nodes: [Arc<Octree<E>>; 8] = children.into();
+        Octree {
+            data: Node(nodes),
+            bounds: OctantDimensions::new(pos, Number::pow(2, height)),
+            height,
+        }
+        .compress_nodes()
     }
 
     pub fn get<P>(&self, pos: P) -> Option<Arc<E>>
@@ -285,6 +333,18 @@ impl<E: PartialEq> Octree<E> {
             data: data,
             ..octree
         }
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn root_point(&self) -> Point3<Number> {
+        self.bounds.bottom_left()
+    }
+
+    pub fn data<'a>(&'a self) -> &'a OctreeData<E> {
+        &self.data
     }
 
     pub fn delete<P>(&self, pos: P) -> Self
@@ -679,5 +739,21 @@ mod test {
             iter.next(),
             Some((&OctantDimensions::new(Point3::new(0, 0, 0), 2), &1234))
         );
+    }
+
+    #[test]
+    fn octree_test_large_amount_of_insertions() {
+        let mut octree = Octree::with_uniform_dimension(8);
+        for _ in 0..1000 {
+            octree = octree.insert(
+                Point3::new(
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                    rand::random::<u8>().into(),
+                ),
+                1234,
+            );
+        }
+        println!("{:?}", octree.root_point());
     }
 }
