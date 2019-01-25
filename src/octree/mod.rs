@@ -137,6 +137,28 @@ impl OctantDimensions {
     pub fn bottom_left(&self) -> Point3<Number> {
         self.bottom_left.clone()
     }
+
+    pub fn diameter(&self) -> Number {
+        self.diameter
+    }
+
+    pub fn get_octant<P>(&self, pos_ref: P) -> Octant
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        let pos = pos_ref.borrow();
+        let center = self.center();
+        match (pos.x >= center.x, pos.y >= center.y, pos.z >= center.z) {
+            (true, true, true) => HighHighHigh,
+            (true, true, false) => HighHighLow,
+            (true, false, true) => HighLowHigh,
+            (true, false, false) => HighLowLow,
+            (false, true, true) => LowHighHigh,
+            (false, true, false) => LowHighLow,
+            (false, false, true) => LowLowHigh,
+            (false, false, false) => LowLowLow,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -165,7 +187,7 @@ impl<E> Clone for Octree<E> {
 
 // Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug)]
-enum Octant {
+pub enum Octant {
     // x, y, z
     HighHighHigh,
     HighHighLow,
@@ -241,8 +263,6 @@ impl Octant {
 
     fn sub_octant_bounds(&self, containing_bounds: &OctantDimensions) -> OctantDimensions {
         let (bottom_left, center) = (containing_bounds.bottom_left(), containing_bounds.center());
-        // Bound radius to be 1 at minimum.
-        //let bounded_radius: i32 = max(radius, 1);
 
         let x_center = if self.is_x_high() {
             center.x
@@ -321,7 +341,7 @@ impl<E: PartialEq> Octree<E> {
             Empty => None,
             Leaf(ref elem) => Some(elem.clone()),
             Node(ref octants) => {
-                let index: usize = self.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant(pos.borrow()).into();
                 octants[index].get(pos)
             }
         }
@@ -347,6 +367,13 @@ impl<E: PartialEq> Octree<E> {
         &self.data
     }
 
+    fn is_empty(&self) -> bool {
+        match self.data {
+            Empty => true,
+            _ => false,
+        }
+    }
+
     pub fn delete<P>(&self, pos: P) -> Self
     where
         P: Borrow<Point3<Number>>,
@@ -360,7 +387,7 @@ impl<E: PartialEq> Octree<E> {
             Leaf(ref curr_leaf) => self.create_sub_nodes(pos, Empty, Leaf(curr_leaf.clone())),
             Node(ref old_nodes) => {
                 let mut nodes = old_nodes.clone();
-                let index: usize = self.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant(pos.borrow()).into();
                 let old_octant: &Arc<Octree<E>> = &old_nodes[index];
                 nodes[index] = Arc::new(old_octant.delete(pos));
                 self.with_data(Node(nodes)).compress_nodes()
@@ -412,7 +439,7 @@ impl<E: PartialEq> Octree<E> {
             }
             Node(ref old_nodes) => {
                 let mut nodes = old_nodes.clone();
-                let index: usize = self.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant(pos.borrow()).into();
                 let old_octant: &Arc<Octree<E>> = &old_nodes[index];
                 nodes[index] = Arc::new(old_octant.ins(pos, data));
                 self.with_data(Node(nodes)).compress_nodes()
@@ -438,7 +465,7 @@ impl<E: PartialEq> Octree<E> {
     where
         P: Borrow<Point3<Number>>,
     {
-        let modified_octant = self.get_octant(pos.borrow());
+        let modified_octant = self.bounds.get_octant(pos.borrow());
 
         let octree_nodes: [Arc<Octree<E>>; 8] = array_init::array_init(|i| {
             let octant = match i {
@@ -471,24 +498,6 @@ impl<E: PartialEq> Octree<E> {
         self.with_data(Node(octree_nodes))
     }
 
-    fn get_octant<P>(&self, pos_ref: P) -> Octant
-    where
-        P: Borrow<Point3<Number>>,
-    {
-        let pos = pos_ref.borrow();
-        let center = self.bounds.center();
-        match (pos.x >= center.x, pos.y >= center.y, pos.z >= center.z) {
-            (true, true, true) => HighHighHigh,
-            (true, true, false) => HighHighLow,
-            (true, false, true) => HighLowHigh,
-            (true, false, false) => HighLowLow,
-            (false, true, true) => LowHighHigh,
-            (false, true, false) => LowHighLow,
-            (false, false, true) => LowLowHigh,
-            (false, false, false) => LowLowLow,
-        }
-    }
-
     pub fn iter<'a>(&'a self) -> OctreeIterator<'a, E> {
         let mut stack = VecDeque::new();
         stack.push_back(self);
@@ -499,20 +508,28 @@ impl<E: PartialEq> Octree<E> {
 pub struct OctreeIterator<'a, E> {
     node_stack: VecDeque<&'a Octree<E>>,
 }
-impl<'a, E> Iterator for OctreeIterator<'a, E> {
+impl<'a, E: PartialEq> Iterator for OctreeIterator<'a, E> {
     type Item = (&'a OctantDimensions, &'a E);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let opt_node = self.node_stack.pop_front();
-        opt_node.and_then(|node| match node.data {
-            Empty => return self.next(),
-            Node(ref children) => {
-                let children_iter = children.into_iter().map(|arc| arc.as_ref());
-                self.node_stack.extend(children_iter);
-                self.next()
+        let mut opt_node = self.node_stack.pop_front();
+        while let Some(node) = opt_node {
+            match node.data {
+                Empty => {}
+                Leaf(ref data) => {
+                    return Some((&node.bounds, data.as_ref()));
+                }
+                Node(ref children) => {
+                    let children_iter = children
+                        .into_iter()
+                        .map(|arc| arc.as_ref())
+                        .filter(|node_ref| !node_ref.is_empty());
+                    self.node_stack.extend(children_iter);
+                }
             }
-            Leaf(ref data) => Some((&node.bounds, data.as_ref())),
-        })
+            opt_node = self.node_stack.pop_front();
+        }
+        return None;
     }
 }
 

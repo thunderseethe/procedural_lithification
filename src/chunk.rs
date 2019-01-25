@@ -3,6 +3,7 @@ use amethyst::core::nalgebra::Point3;
 use std::{borrow::Borrow, default::Default};
 
 pub type Block = u32;
+pub static AIR_BLOCK: Block = 0;
 pub static DIRT_BLOCK: Block = 1;
 
 #[derive(Debug)]
@@ -23,6 +24,15 @@ impl Chunk {
         Chunk { octree }
     }
 
+    pub fn get_block<P>(&self, pos: P) -> Block
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        self.octree
+            .get(pos)
+            .map_or(AIR_BLOCK, |arc| arc.as_ref().clone())
+    }
+
     pub fn place_block<P>(&mut self, pos: P, block: Block) -> &mut Self
     where
         P: Borrow<Point3<Number>>,
@@ -31,20 +41,24 @@ impl Chunk {
         self
     }
 
-    pub fn iter<'a>(&'a self) -> ChunkIterator<'a> {
-        ChunkIterator {
+    pub fn block_iter<'a>(&'a self) -> SingleBlockIterator<'a> {
+        SingleBlockIterator {
             iter: self.octree.iter(),
             state: None,
         }
     }
+
+    pub fn iter<'a>(&'a self) -> OctreeIterator<'a, Block> {
+        self.octree.iter()
+    }
 }
 
-pub struct ChunkIterator<'a> {
+pub struct SingleBlockIterator<'a> {
     iter: OctreeIterator<'a, Block>,
     state: Option<(&'a OctantDimensions, &'a Block, Point3<Number>)>,
 }
 
-impl<'a> ChunkIterator<'a> {
+impl<'a> SingleBlockIterator<'a> {
     fn increment(&self, dim: &'a OctantDimensions, point: Point3<Number>) -> Point3<Number> {
         let mut result = Point3::new(point.x + 1, point.y, point.z);
         if result.x > dim.x_max() {
@@ -62,7 +76,7 @@ impl<'a> ChunkIterator<'a> {
     }
 }
 
-impl<'a> Iterator for ChunkIterator<'a> {
+impl<'a> Iterator for SingleBlockIterator<'a> {
     type Item = (Point3<Number>, &'a Block);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -104,7 +118,7 @@ mod test {
             .place_block(Point3::new(1, 1, 0), 7)
             .place_block(Point3::new(1, 1, 1), 8);
 
-        let mut iter = chunk.iter();
+        let mut iter = chunk.block_iter();
 
         assert_eq!(iter.next(), Some((Point3::new(1, 1, 1), &8)));
         assert_eq!(iter.next(), Some((Point3::new(1, 1, 0), &7)));
