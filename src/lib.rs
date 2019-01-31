@@ -8,6 +8,7 @@ extern crate rayon;
 extern crate serde;
 
 pub mod chunk;
+//pub mod indexed_arena;
 pub mod octree;
 pub mod systems;
 pub mod terrain;

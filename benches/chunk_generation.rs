@@ -7,8 +7,10 @@ use cubes_lib::terrain::Terrain;
 use std::time::Duration;
 
 fn chunk_generation(c: &mut Criterion) {
-    let safe_gen = Fun::new("Safe", |b, _| b.iter(|| Terrain::new(0.0).generate_chunk()));
-    let unsafe_gen = Fun::new("Unsafe", |b, _| {
+    let safe_gen = Fun::new("ChunkBuilder", |b, _| {
+        b.iter(|| Terrain::new(0.0).generate_chunk())
+    });
+    let unsafe_gen = Fun::new("Bare Rayon", |b, _| {
         b.iter(|| Terrain::new(0.0).old_generate_chunk())
     });
     c.bench_functions("Chunk Generation", vec![safe_gen, unsafe_gen], &5);

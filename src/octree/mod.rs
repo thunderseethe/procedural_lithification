@@ -1,171 +1,34 @@
-extern crate amethyst;
-extern crate array_init;
-extern crate num_traits;
-
+use crate::terrain::OrdPoint3;
 use amethyst::core::nalgebra::geometry::Point3;
-use num_traits::Num;
-use std::{
-    borrow::Borrow,
-    cmp::{Ord, Ordering, PartialOrd},
-    collections::VecDeque,
-    sync::Arc,
-};
+use rayon::iter::plumbing::*;
+use rayon::prelude::*;
+use std::{borrow::Borrow, collections::VecDeque, fmt, sync::Arc};
 
-#[derive(Debug)]
-pub enum OctreeData<E> {
-    Node([Arc<Octree<E>>; 8]),
-    Leaf(Arc<E>),
-    Empty,
-}
-impl<E: PartialEq> PartialEq for OctreeData<E> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Empty, Empty) => true,
-            (Leaf(ref a_elem), Leaf(ref b_elem)) => *a_elem == *b_elem,
-            (Node(ref a_nodes), Node(ref b_nodes)) => *a_nodes == *b_nodes,
-            (_, _) => false,
-        }
-    }
-}
-impl<E: Eq> Eq for OctreeData<E> {}
+pub mod octant;
+pub mod octant_dimensions;
+pub mod octree_data;
 
-impl<E> Clone for OctreeData<E> {
-    fn clone(&self) -> Self {
-        match *self {
-            Node(ref nodes) => Node(nodes.clone()),
-            Leaf(ref arc_elem) => Leaf(arc_elem.clone()),
-            Empty => Empty,
-        }
-    }
-}
-
-impl<E> OctreeData<E> {
-    fn with_leaf<R: Into<Arc<E>>>(elem: R) -> Self {
-        Leaf(elem.into())
-    }
-}
+use octant::Octant::*;
+use octant_dimensions::OctantDimensions;
+use octree_data::{OctreeData, OctreeData::*};
 
 // Alias to allow for easy swapping of position type.
 pub type Number = u16;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct OctantDimensions {
-    bottom_left: Point3<Number>,
-    diameter: Number,
-}
-
-impl PartialOrd for OctantDimensions {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for OctantDimensions {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use std::cmp::Ordering::*;
-        let cmps = (
-            self.bottom_left.x.cmp(&other.bottom_left.x),
-            self.bottom_left.y.cmp(&other.bottom_left.y),
-            self.bottom_left.z.cmp(&other.bottom_left.z),
-            self.diameter.cmp(&other.diameter),
-        );
-        match cmps {
-            (Greater, Greater, Greater, _) => Greater,
-            (Greater, _, _, _) => Greater,
-            (Equal, Greater, _, _) => Greater,
-            (Equal, Equal, Greater, _) => Greater,
-            (Equal, Equal, Equal, Greater) => Greater,
-            (Equal, Equal, Equal, Equal) => Equal,
-            (_, _, _, _) => Less,
-        }
-    }
-}
-
-impl OctantDimensions {
-    pub fn new(bottom_left: Point3<Number>, diameter: Number) -> Self {
-        OctantDimensions {
-            bottom_left,
-            diameter,
-        }
-    }
-
-    pub fn nearest_octant_point(p: Point3<Number>, height: u32) -> Point3<Number> {
-        let multiple = Number::pow(2, height);
-        let mut new_point = p.clone();
-        for e in new_point.iter_mut() {
-            *e = (*e as f32 / multiple as f32).floor() as Number * multiple;
-        }
-        return new_point;
-    }
-
-    pub fn x_min(&self) -> Number {
-        self.bottom_left.x
-    }
-    pub fn x_max(&self) -> Number {
-        self.bottom_left.x + self.diameter - 1
-    }
-    pub fn y_min(&self) -> Number {
-        self.bottom_left.y
-    }
-    pub fn y_max(&self) -> Number {
-        self.bottom_left.y + self.diameter - 1
-    }
-    pub fn z_min(&self) -> Number {
-        self.bottom_left.z
-    }
-    pub fn z_max(&self) -> Number {
-        self.bottom_left.z + self.diameter - 1
-    }
-
-    pub fn top_right(&self) -> Point3<Number> {
-        let mut top_right = self.bottom_left.clone();
-        for e in top_right.iter_mut() {
-            *e += self.diameter - 1;
-        }
-        return top_right;
-    }
-
-    pub fn center(&self) -> Point3<Number> {
-        let radius = self.diameter / 2;
-        let mut center = self.bottom_left.clone();
-        for e in center.iter_mut() {
-            *e += radius;
-        }
-        return center;
-    }
-
-    pub fn bottom_left(&self) -> Point3<Number> {
-        self.bottom_left.clone()
-    }
-
-    pub fn diameter(&self) -> Number {
-        self.diameter
-    }
-
-    pub fn get_octant<P>(&self, pos_ref: P) -> Octant
-    where
-        P: Borrow<Point3<Number>>,
-    {
-        let pos = pos_ref.borrow();
-        let center = self.center();
-        match (pos.x >= center.x, pos.y >= center.y, pos.z >= center.z) {
-            (true, true, true) => HighHighHigh,
-            (true, true, false) => HighHighLow,
-            (true, false, true) => HighLowHigh,
-            (true, false, false) => HighLowLow,
-            (false, true, true) => LowHighHigh,
-            (false, true, false) => LowHighLow,
-            (false, false, true) => LowLowHigh,
-            (false, false, false) => LowLowLow,
-        }
-    }
-}
-
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct Octree<E> {
     data: OctreeData<E>,
     bounds: OctantDimensions,
     height: u32,
+}
+
+impl<E: fmt::Debug> fmt::Debug for Octree<E> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Octree")
+            .field("data", &self.data)
+            .field("bounds", &self.bounds)
+            .finish()
+    }
 }
 
 impl<E: PartialEq> PartialEq for Octree<E> {
@@ -185,121 +48,7 @@ impl<E> Clone for Octree<E> {
     }
 }
 
-// Represnt each possible Octant as a sum type.
-#[derive(PartialEq, Clone, Eq, Copy, Debug)]
-pub enum Octant {
-    // x, y, z
-    HighHighHigh,
-    HighHighLow,
-    HighLowHigh,
-    HighLowLow,
-    LowHighHigh,
-    LowHighLow,
-    LowLowHigh,
-    LowLowLow,
-}
-
-macro_rules! octant_num_conversions {
-    ($( $num:ty ),* ) => {
-        $(
-            impl Into<$num> for Octant {
-                fn into(self) -> $num {
-                    match self {
-                        HighHighHigh => 0,
-                        HighHighLow => 1,
-                        HighLowHigh => 2,
-                        HighLowLow => 3,
-                        LowHighHigh => 4,
-                        LowHighLow => 5,
-                        LowLowHigh => 6,
-                        LowLowLow => 7,
-                    }
-                }
-            }
-
-            impl From<$num> for Octant {
-                fn from(num: $num) -> Self {
-                    match num {
-                        0 => HighHighHigh,
-                        1 => HighHighLow,
-                        2 => HighLowHigh,
-                        3 => HighLowLow,
-                        4 => LowHighHigh,
-                        5 => LowHighLow,
-                        6 => LowLowHigh,
-                        7 => LowLowLow,
-                        _ => panic!("Tried to create more than 8 elements in an octree"),
-                    }
-                }
-            }
-        )*
-    };
-}
-
-octant_num_conversions!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
-
-use self::Octant::*;
-impl Octant {
-    fn is_x_high(&self) -> bool {
-        match self {
-            HighHighHigh | HighHighLow | HighLowHigh | HighLowLow => true,
-            _ => false,
-        }
-    }
-
-    fn is_y_high(&self) -> bool {
-        match self {
-            HighHighHigh | HighHighLow | LowHighHigh | LowHighLow => true,
-            _ => false,
-        }
-    }
-
-    fn is_z_high(&self) -> bool {
-        match self {
-            HighHighHigh | HighLowHigh | LowHighHigh | LowLowHigh => true,
-            _ => false,
-        }
-    }
-
-    fn sub_octant_bounds(&self, containing_bounds: &OctantDimensions) -> OctantDimensions {
-        let (bottom_left, center) = (containing_bounds.bottom_left(), containing_bounds.center());
-
-        let x_center = if self.is_x_high() {
-            center.x
-        } else {
-            bottom_left.x
-        };
-        let y_center = if self.is_y_high() {
-            center.y
-        } else {
-            bottom_left.y
-        };
-        let z_center = if self.is_z_high() {
-            center.z
-        } else {
-            bottom_left.z
-        };
-
-        OctantDimensions::new(
-            Point3::new(x_center, y_center, z_center),
-            containing_bounds.diameter / 2,
-        )
-    }
-}
-
-use self::OctreeData::*;
-
-#[inline]
-/// Check if all elements of an iterator are equal.
-fn all_element_equal<I, E>(iter: &mut I) -> bool
-where
-    I: Iterator<Item = E>,
-    E: PartialEq,
-{
-    iter.next().map_or(true, |head| iter.all(|ele| head == ele))
-}
-
-impl<E: PartialEq> Octree<E> {
+impl<E: fmt::Debug + PartialEq> Octree<E> {
     pub fn new(pos: Point3<Number>, opt: Option<E>, height: u32) -> Self {
         let data = opt.map_or(Empty, |elem| Leaf(Arc::new(elem)));
         Octree {
@@ -331,6 +80,14 @@ impl<E: PartialEq> Octree<E> {
             height,
         }
         .compress_nodes()
+    }
+
+    pub fn with_fields(data: OctreeData<E>, bounds: OctantDimensions, height: u32) -> Self {
+        Octree {
+            data,
+            bounds,
+            height,
+        }
     }
 
     pub fn get<P>(&self, pos: P) -> Option<Arc<E>>
@@ -366,11 +123,28 @@ impl<E: PartialEq> Octree<E> {
     pub fn data<'a>(&'a self) -> &'a OctreeData<E> {
         &self.data
     }
+    pub fn set_data(&mut self, data: OctreeData<E>) {
+        self.data = data;
+    }
 
     fn is_empty(&self) -> bool {
         match self.data {
             Empty => true,
             _ => false,
+        }
+    }
+
+    pub fn is_node(&self) -> bool {
+        match self.data {
+            Node(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn mut_children<'a>(&'a mut self) -> &'a mut [Arc<Octree<E>>; 8] {
+        match self.data {
+            Node(ref mut nodes) => nodes,
+            _ => panic!("Unexpected mut_children() on Leaf or Empty data"),
         }
     }
 
@@ -461,6 +235,21 @@ impl<E: PartialEq> Octree<E> {
         }
     }
 
+    pub fn compress(&mut self) {
+        match &mut self.data {
+            Node(ref mut nodes) => {
+                nodes
+                    .iter_mut()
+                    .for_each(|node| Arc::get_mut(node).unwrap().compress());
+                let mut data = nodes.iter().map(|node| &node.data);
+                if data.next().map_or(true, |head| data.all(|ele| head == ele)) {
+                    self.data = nodes[0].data.clone();
+                }
+            }
+            _ => (),
+        }
+    }
+
     fn create_sub_nodes<P>(&self, pos: P, elem: OctreeData<E>, default: OctreeData<E>) -> Self
     where
         P: Borrow<Point3<Number>>,
@@ -505,10 +294,115 @@ impl<E: PartialEq> Octree<E> {
     }
 }
 
+impl<E: Send + Sync> IntoParallelIterator for Octree<E> {
+    type Iter = ParallelOctreeIter<E>;
+    type Item = <<Octree<E> as IntoParallelIterator>::Iter as ParallelIterator>::Item;
+
+    fn into_par_iter(self) -> Self::Iter {
+        ParallelOctreeIter { node: self }
+    }
+}
+
+pub struct ParallelOctreeIter<E> {
+    node: Octree<E>,
+}
+
+pub fn parallel_drive_node_children<'a, ITEM, E, C, F>(
+    nodes: &'a [Arc<Octree<E>>; 8],
+    consumer: C,
+    handle_child: F,
+) -> C::Result
+where
+    E: Send + Sync,
+    C: UnindexedConsumer<ITEM>,
+    F: Fn(&'a Octree<E>, C) -> C::Result + Send + Sync,
+{
+    let reducer = consumer.to_reducer();
+    let (left_half, right_half) = (consumer.split_off_left(), consumer);
+    let (ll_quarter, lr_quarter, rl_quarter, rr_quarter) = (
+        left_half.split_off_left(),
+        left_half,
+        right_half.split_off_left(),
+        right_half,
+    );
+    let (lll_octet, llr_octet, lrl_octet, lrr_octet, rll_octet, rlr_octet, rrl_octet, rrr_octet) = (
+        ll_quarter.split_off_left(),
+        ll_quarter,
+        lr_quarter.split_off_left(),
+        lr_quarter,
+        rl_quarter.split_off_left(),
+        rl_quarter,
+        rr_quarter.split_off_left(),
+        rr_quarter,
+    );
+    let (left, right) = rayon::join(
+        || {
+            let reducer = lll_octet.to_reducer();
+            let (left, right) = rayon::join(
+                || {
+                    let r = lll_octet.to_reducer();
+                    r.reduce(
+                        handle_child(&nodes[0], lll_octet),
+                        handle_child(&nodes[1], llr_octet),
+                    )
+                },
+                || {
+                    let r = lrl_octet.to_reducer();
+                    r.reduce(
+                        handle_child(&nodes[2], lrl_octet),
+                        handle_child(&nodes[3], lrr_octet),
+                    )
+                },
+            );
+            reducer.reduce(left, right)
+        },
+        || {
+            let reducer = rll_octet.to_reducer();
+            let (left, right) = rayon::join(
+                || {
+                    let r = rll_octet.to_reducer();
+                    r.reduce(
+                        handle_child(&nodes[4], rll_octet),
+                        handle_child(&nodes[5], rlr_octet),
+                    )
+                },
+                || {
+                    let r = rrl_octet.to_reducer();
+                    r.reduce(
+                        handle_child(&nodes[6], rrl_octet),
+                        handle_child(&nodes[7], rrr_octet),
+                    )
+                },
+            );
+            reducer.reduce(left, right)
+        },
+    );
+    reducer.reduce(left, right)
+}
+impl<E: Send + Sync> ParallelIterator for ParallelOctreeIter<E> {
+    type Item = (OctantDimensions, Arc<E>);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        match self.node.data {
+            Empty => consumer.into_folder().complete(),
+            Leaf(elem) => consumer
+                .into_folder()
+                .consume((self.node.bounds, elem))
+                .complete(),
+            Node(nodes) => parallel_drive_node_children(&nodes, consumer, |node, consumer| {
+                node.clone().into_par_iter().drive_unindexed(consumer)
+            }),
+        }
+    }
+}
+
 pub struct OctreeIterator<'a, E> {
     node_stack: VecDeque<&'a Octree<E>>,
 }
-impl<'a, E: PartialEq> Iterator for OctreeIterator<'a, E> {
+impl<'a, E: fmt::Debug + PartialEq> Iterator for OctreeIterator<'a, E> {
     type Item = (&'a OctantDimensions, &'a E);
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -1,3 +1,4 @@
+use crate::octree::octree_data::OctreeData::Leaf;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 use rayon::prelude::*;
@@ -7,8 +8,8 @@ use std::{
     sync::Arc,
 };
 
-use crate::chunk::{Block, Chunk, DIRT_BLOCK};
-use crate::octree::{Number, OctantDimensions, Octree};
+use crate::chunk::{Block, Chunk, ChunkBuilder, DIRT_BLOCK};
+use crate::octree::{Number, octant_dimensions::OctantDimensions, Octree};
 
 pub struct Terrain {
     simplex: OpenSimplex,
@@ -19,11 +20,11 @@ pub struct Terrain {
 // Wrapper to provide ordering for points so they can be sorted.
 // This ordering is abritrary and doesn't matter so it is kept iternal to terrain generation.
 #[derive(PartialEq, Eq, Clone)]
-struct OrdPoint3<N: Scalar> {
+pub struct OrdPoint3<N: Scalar> {
     p: Point3<N>,
 }
 impl<N: Scalar> OrdPoint3<N> {
-    fn new(p: Point3<N>) -> Self {
+    pub fn new(p: Point3<N>) -> Self {
         OrdPoint3 { p }
     }
 }
@@ -51,11 +52,11 @@ impl<N: Ord + Eq + Scalar> Ord for OrdPoint3<N> {
 }
 impl<N: Scalar> fmt::Debug for OrdPoint3<N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{ x: {:?}, y: {:?}, z: {:?} }}",
-            self.p.x, self.p.y, self.p.z
-        )
+        f.debug_struct("Point3")
+            .field("x", &self.p.x)
+            .field("y", &self.p.y)
+            .field("z", &self.p.z)
+            .finish()
     }
 }
 impl<N: Scalar> Into<Point3<N>> for OrdPoint3<N> {
@@ -82,28 +83,6 @@ pub fn index(size: usize, x: usize, y: usize, z: usize) -> usize {
     ((x * size * size) + (y * size) + z) * 8
 }
 
-struct MultiThreadGeneration<T> {
-    ptr: *const T,
-}
-impl<T> MultiThreadGeneration<T> {
-    pub fn new(ptr: *const T) -> Self {
-        MultiThreadGeneration { ptr }
-    }
-}
-unsafe impl<T> Send for MultiThreadGeneration<T> {}
-unsafe impl<T> Sync for MultiThreadGeneration<T> {}
-
-struct MutMultiThreadGeneration<T> {
-    ptr: *mut T,
-}
-impl<T> MutMultiThreadGeneration<T> {
-    pub fn new(ptr: *mut T) -> Self {
-        MutMultiThreadGeneration { ptr }
-    }
-}
-unsafe impl<T> Send for MutMultiThreadGeneration<T> {}
-unsafe impl<T> Sync for MutMultiThreadGeneration<T> {}
-
 type ParentOctantVec = Vec<(OrdPoint3<Number>, Octree<Block>)>;
 impl Terrain {
     pub fn new(threshold: f64) -> Self {
@@ -117,83 +96,21 @@ impl Terrain {
     pub fn generate_block(&self, x: f64, y: f64, z: f64) -> Option<Block> {
         //let p = [x / 10.0, y / 10.0, z / 10.0];
         //let e = self.perlin.get(p);
-        if y < 64.0 {
+        if y < 128.0 {
             Some(DIRT_BLOCK)
         } else {
             None
         }
     }
 
-    pub fn generate_depth0(&self) -> Vec<Octree<Block>> {
-        let depth0_size = 2097152 * 8;
-        let mut depth0: Vec<Octree<Block>> =
-            vec![Octree::new(Point3::new(0, 0, 0), None, 0); depth0_size];
-        let depth0_ptr = MutMultiThreadGeneration::new(depth0.as_mut_ptr());
-        triplets(256).for_each(|(x, y, z)| {
-            let data = self.generate_block(x as f64, y as f64, z as f64);
-            let pos = Point3::new(x, y, z);
-            let (parent_index, sub_octant_index) = Terrain::parent_indices(pos, 0);
-            unsafe {
-                let p = depth0_ptr.ptr.add(parent_index + sub_octant_index);
-                //match ptr.as_mut() {
-                //    Some(octant) => {
-                //        *octant = Octree::new(pos, data, 0);
-                //    }
-                //    None => panic!("unexpected null array"),
-                //}
-                ptr::write(p, Octree::new(pos, data, 0));
-            }
-        });
-        depth0
-    }
-
     pub fn generate_chunk(&self) -> Chunk {
-        let mut depth_n = self.generate_depth0();
-        for height in 1..8 {
-            let inv_height = 8 - height;
-            let inv_multiple = usize::pow(2, inv_height);
-            let multiple = u16::pow(2, height);
-            // For capacity we want to remove a factor of 2
-            // Basically we're calculating (2^(8 - height - 1))^3 which is the number of parent nodes we'll have
-            // If we just calculated (2^(8 - height))^3 we would have far too many nodes for each height and waste allocations
-            let capacity = usize::pow(2, (inv_height - 1) * 3) * 8;
-            let mut depth_n1: Vec<Octree<Block>> =
-                vec![Octree::new(Point3::new(0, 0, 0), None, 0); capacity];
-            let depth_n_ptr = MultiThreadGeneration::new(depth_n.as_ptr());
-            let depth_n1_ptr = MutMultiThreadGeneration::new(depth_n1.as_mut_ptr());
-            triplets(inv_multiple as u16).for_each(|(x, y, z)| {
-                let child_index = index(inv_multiple, x.into(), y.into(), z.into());
-                let children: [Arc<Octree<Block>>; 8] =
-                    array_init::array_init(|i| Arc::new(depth_n[child_index + i].clone()));
-                let pos = Point3::new(x * multiple, y * multiple, z * multiple);
-                let (parent_index, sub_octant_index) = Terrain::parent_indices(pos, height);
-                unsafe {
-                    ptr::write(
-                        depth_n1_ptr.ptr.add(parent_index + sub_octant_index),
-                        Octree::with_children(children, pos, height),
-                    );
-                }
-            });
-            depth_n = depth_n1;
-        }
-        let children: [Arc<Octree<Block>>; 8] =
-            array_init::array_init(|i| Arc::new(depth_n[i].clone()));
-        Chunk::new(Octree::with_children(children, Point3::new(0, 0, 0), 8))
-    }
-
-    #[inline]
-    fn parent_indices(pos: Point3<u16>, height: u32) -> (usize, usize) {
-        let parent_height = height + 1;
-        let parent_pos = OctantDimensions::nearest_octant_point(pos, parent_height);
-        let parent_octant = OctantDimensions::new(parent_pos, 1 << parent_height);
-        let parent_index = index(
-            usize::pow(2, 8 - parent_height),
-            (parent_pos.x >> parent_height).into(),
-            (parent_pos.y >> parent_height).into(),
-            (parent_pos.z >> parent_height).into(),
-        );
-        let sub_octant_index: usize = parent_octant.get_octant(pos).into();
-        (parent_index, sub_octant_index)
+        let mut chunk_to_be = ChunkBuilder::new();
+        chunk_to_be.par_iter_mut().for_each(|leaf| {
+            let pos = leaf.root_point();
+            self.generate_block(pos.x as f64, pos.y as f64, pos.z as f64)
+                .map(|block| leaf.set_data(Leaf(Arc::new(block))));
+        });
+        chunk_to_be.build()
     }
 
     pub fn old_generate_chunk(&self) -> Chunk {
@@ -201,15 +118,11 @@ impl Terrain {
 
         let mut intermediate_octrees: Vec<Octree<Block>> = xyzs
             .map(|(x, y, z)| {
-                let pos = Point3::new(x, y, z);
-                let p = [x as f64 / 10.0, y as f64 / 10.0, z as f64 / 10.0];
-                let e = self.perlin.get(p);
-                let data = if e > self.block_threshold {
-                    Some(DIRT_BLOCK)
-                } else {
-                    None
-                };
-                Octree::new(pos, data, 0)
+                Octree::new(
+                    Point3::new(x, y, z),
+                    self.generate_block(x as f64, y as f64, z as f64),
+                    0,
+                )
             })
             .collect();
 
@@ -257,9 +170,4 @@ impl Terrain {
             }
         })
     }
-}
-
-#[cfg(test)]
-mod test {
-    use test::Bencher;
 }

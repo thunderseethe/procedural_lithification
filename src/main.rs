@@ -14,7 +14,7 @@ use amethyst::{
 };
 
 use cubes_lib::chunk::{Block, Chunk, DIRT_BLOCK};
-use cubes_lib::octree::OctantDimensions;
+use cubes_lib::octree::octant_dimensions::OctantDimensions;
 use cubes_lib::systems::{PlayerControlBundle, PlayerControlTag};
 use cubes_lib::terrain::Terrain;
 
@@ -232,9 +232,10 @@ impl SimpleState for Cubes {
 }
 
 fn main() -> amethyst::Result<()> {
-    //let chunk = Terrain::new(0.0).generate_chunk();
-    //println!("{:#?}", chunk.get_block(Point3::new(1, 2, 3)));
-    //return Ok(());
+    let terrain = Terrain::new(0.0);
+    let chunk = terrain.generate_chunk();
+    println!("{:#?}", chunk);
+    return Ok(());
     amethyst::start_logger(Default::default());
 
     let app_root = application_root_dir();

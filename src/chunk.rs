@@ -1,6 +1,8 @@
-use crate::octree::*;
+use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
 use amethyst::core::nalgebra::Point3;
-use std::{borrow::Borrow, default::Default};
+use rayon::iter::{plumbing::*, *};
+use rayon::prelude::*;
+use std::{borrow::Borrow, default::Default, sync::Arc};
 
 pub type Block = u32;
 pub static AIR_BLOCK: Block = 0;
@@ -101,6 +103,290 @@ impl<'a> Iterator for SingleBlockIterator<'a> {
     }
 }
 
+pub struct ChunkBuilder {
+    tree: Octree<Block>,
+}
+
+impl ChunkBuilder {
+    pub fn new() -> Self {
+        ChunkBuilder {
+            tree: gen_subtree(Point3::new(0, 0, 0), 8),
+        }
+    }
+
+    fn with_tree(tree: Octree<Block>) -> Self {
+        ChunkBuilder { tree }
+    }
+
+    pub fn build(mut self) -> Chunk {
+        self.tree.compress();
+        Chunk::new(self.tree)
+    }
+}
+
+impl ParallelIterator for ChunkBuilder {
+    type Item = Octree<Block>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        use crate::octree::{octree_data::OctreeData::Node, parallel_drive_node_children};
+        match self.tree.data() {
+            Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
+                ChunkBuilder::with_tree(node.clone())
+                    .into_par_iter()
+                    .drive_unindexed(cnsmr)
+            }),
+            _ => consumer.into_folder().consume(self.tree).complete(),
+        }
+    }
+}
+
+impl<'data> IntoParallelIterator for &'data mut ChunkBuilder {
+    type Iter = IterMut<'data>;
+    type Item = <IterMut<'data> as ParallelIterator>::Item;
+
+    fn into_par_iter(self) -> Self::Iter {
+        IterMut {
+            tree: &mut self.tree,
+        }
+    }
+}
+
+pub struct IterMut<'data> {
+    tree: &'data mut Octree<Block>,
+}
+impl<'data> ParallelIterator for IterMut<'data> {
+    type Item = &'data mut Octree<Block>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        if self.tree.is_node() {
+            parallel_drive_mut_node_children(self.tree.mut_children(), consumer, |node, cnsmr| {
+                (IterMut {
+                    tree: Arc::make_mut(node),
+                })
+                .into_par_iter()
+                .drive_unindexed(cnsmr)
+            })
+        } else {
+            consumer.into_folder().consume(self.tree).complete()
+        }
+    }
+}
+
+macro_rules! node_index {
+    ($node:expr, $i:expr) => {
+        unsafe { $node.ptr.add($i).as_mut().unwrap() }
+    };
+}
+
+struct MultiThreadMutPtr<T> {
+    ptr: *mut T,
+}
+unsafe impl<T> Send for MultiThreadMutPtr<T> {}
+unsafe impl<T> Sync for MultiThreadMutPtr<T> {}
+
+pub fn parallel_drive_mut_node_children<'a, ITEM, E, C, F>(
+    nodes: &'a mut [Arc<Octree<E>>; 8],
+    consumer: C,
+    handle_child: F,
+) -> C::Result
+where
+    E: Send + Sync,
+    C: UnindexedConsumer<ITEM>,
+    F: Fn(&'a mut Arc<Octree<E>>, C) -> C::Result + Send + Sync,
+{
+    let nodes_ptr = MultiThreadMutPtr {
+        ptr: nodes.as_mut_ptr(),
+    };
+    let reducer = consumer.to_reducer();
+    let (left_half, right_half) = (consumer.split_off_left(), consumer);
+    let (ll_quarter, lr_quarter, rl_quarter, rr_quarter) = (
+        left_half.split_off_left(),
+        left_half,
+        right_half.split_off_left(),
+        right_half,
+    );
+    let (lll_octet, llr_octet, lrl_octet, lrr_octet, rll_octet, rlr_octet, rrl_octet, rrr_octet) = (
+        ll_quarter.split_off_left(),
+        ll_quarter,
+        lr_quarter.split_off_left(),
+        lr_quarter,
+        rl_quarter.split_off_left(),
+        rl_quarter,
+        rr_quarter.split_off_left(),
+        rr_quarter,
+    );
+    let (left, right) = rayon::join(
+        || {
+            let reducer = lll_octet.to_reducer();
+            let (left, right) = rayon::join(
+                || {
+                    let r = lll_octet.to_reducer();
+                    r.reduce(
+                        handle_child(node_index!(nodes_ptr, 0), lll_octet),
+                        handle_child(node_index!(nodes_ptr, 1), llr_octet),
+                    )
+                },
+                || {
+                    let r = lrl_octet.to_reducer();
+                    r.reduce(
+                        handle_child(node_index!(nodes_ptr, 2), lrl_octet),
+                        handle_child(node_index!(nodes_ptr, 3), lrr_octet),
+                    )
+                },
+            );
+            reducer.reduce(left, right)
+        },
+        || {
+            let reducer = rll_octet.to_reducer();
+            let (left, right) = rayon::join(
+                || {
+                    let r = rll_octet.to_reducer();
+                    r.reduce(
+                        handle_child(node_index!(nodes_ptr, 4), rll_octet),
+                        handle_child(node_index!(nodes_ptr, 5), rlr_octet),
+                    )
+                },
+                || {
+                    let r = rrl_octet.to_reducer();
+                    r.reduce(
+                        handle_child(node_index!(nodes_ptr, 6), rrl_octet),
+                        handle_child(node_index!(nodes_ptr, 7), rrr_octet),
+                    )
+                },
+            );
+            reducer.reduce(left, right)
+        },
+    );
+    reducer.reduce(left, right)
+}
+//impl<'data> ParallelIterator for &'data mut ChunkBuilder {
+//    type Item = &'data mut Octree<Block>;
+//
+//    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+//    where
+//        C: UnindexedConsumer<Self::Item>,
+//    {
+//        use crate::octree::{parallel_drive_node_children, OctreeData::Node};
+//        match self.tree.data() {
+//            Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
+//                let mut chunk_builder = ChunkBuilder::with_tree(node.clone());
+//                chunk_builder.par_iter_mut().drive_unindexed(cnsmr)
+//            }),
+//            _ => consumer.into_folder().consume(&mut self.tree).complete(),
+//        }
+//    }
+//}
+
+fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
+    // Base case
+    if height == 0 {
+        Octree::new(pos, None, height)
+    } else {
+        let child_height = height - 1;
+        let dimension = Number::pow(2, child_height);
+        let (((hhh, hhl), (hlh, hll)), ((lhh, lhl), (llh, lll))) = rayon::join(
+            || {
+                rayon::join(
+                    || {
+                        rayon::join(
+                            /* 0 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(
+                                        pos.x + dimension,
+                                        pos.y + dimension,
+                                        pos.z + dimension,
+                                    ),
+                                    child_height,
+                                )
+                            },
+                            /* 1 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x + dimension, pos.y + dimension, pos.z),
+                                    child_height,
+                                )
+                            },
+                        )
+                    },
+                    || {
+                        rayon::join(
+                            /* 2 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x + dimension, pos.y, pos.z + dimension),
+                                    child_height,
+                                )
+                            },
+                            /* 3 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x + dimension, pos.y, pos.z),
+                                    child_height,
+                                )
+                            },
+                        )
+                    },
+                )
+            },
+            || {
+                rayon::join(
+                    || {
+                        rayon::join(
+                            /* 4 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x, pos.y + dimension, pos.z + dimension),
+                                    child_height,
+                                )
+                            },
+                            /* 5 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x, pos.y + dimension, pos.z),
+                                    child_height,
+                                )
+                            },
+                        )
+                    },
+                    || {
+                        rayon::join(
+                            /* 6 */
+                            || {
+                                gen_subtree(
+                                    Point3::new(pos.x, pos.y, pos.z + dimension),
+                                    child_height,
+                                )
+                            },
+                            /* 7 */
+                            || gen_subtree(Point3::new(pos.x, pos.y, pos.z), child_height),
+                        )
+                    },
+                )
+            },
+        );
+        Octree::with_fields(
+            OctreeData::Node([
+                Arc::new(hhh),
+                Arc::new(hhl),
+                Arc::new(hlh),
+                Arc::new(hll),
+                Arc::new(lhh),
+                Arc::new(lhl),
+                Arc::new(llh),
+                Arc::new(lll),
+            ]),
+            OctantDimensions::new(pos, Number::pow(2, height)),
+            height,
+        )
+    }
+}
 #[cfg(test)]
 mod test {
     use super::{Chunk, Point3};
