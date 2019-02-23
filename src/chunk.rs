@@ -1,29 +1,27 @@
-use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
-use amethyst::core::nalgebra::Point3;
+use crate::mut_ptr::MultiThreadMutPtr;
+use crate::octree::{octant_dimensions::*, octant_face::OctantFace, octree_data::OctreeData, *};
+use amethyst::{
+    core::nalgebra::{convert, Point3, Vector2, Vector3},
+    renderer::{MeshData, PosNormTangTex},
+};
+use array_init::array_init;
+use num_traits::FromPrimitive;
 use rayon::iter::{plumbing::*, *};
-use rayon::prelude::*;
 use std::{borrow::Borrow, default::Default, sync::Arc};
 
 pub type Block = u32;
 pub static AIR_BLOCK: Block = 0;
 pub static DIRT_BLOCK: Block = 1;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Chunk {
+    pub pos: Point3<i32>,
     octree: Octree<Block>,
-    // check that boxes are placed at their top right corner.
-}
-
-impl Default for Chunk {
-    fn default() -> Self {
-        // Default chunk size is 256 x 256 x 256
-        Chunk::new(Octree::with_uniform_dimension(8))
-    }
 }
 
 impl Chunk {
-    pub fn new(octree: Octree<Block>) -> Self {
-        Chunk { octree }
+    pub fn new(pos: Point3<i32>, octree: Octree<Block>) -> Self {
+        Chunk { pos, octree }
     }
 
     pub fn get_block<P>(&self, pos: P) -> Block
@@ -43,6 +41,35 @@ impl Chunk {
         self
     }
 
+    pub fn generate_mesh(&self) -> MeshData {
+        let root_octree = &self.octree;
+        self.octree
+            .clone()
+            .into_par_iter()
+            .map(|(dim, _)| {
+                let faces: [bool; 6] = array_init(|i| {
+                    let face = OctantFace::from_usize(i).unwrap();
+                    if root_octree.face_boundary_adjacent(&dim, face) {
+                        true
+                    } else {
+                        root_octree.check_octant_face_visible(
+                            dim.face_adjacent_point(face),
+                            dim.diameter(),
+                        )
+                    }
+                });
+                cube_mesh(convert(dim.bottom_left()), dim.diameter() as f32, &faces)
+            })
+            .reduce(
+                || Vec::new(),
+                |mut vec1, vec2| {
+                    vec1.extend(vec2);
+                    vec1
+                },
+            )
+            .into()
+    }
+
     pub fn block_iter<'a>(&'a self) -> SingleBlockIterator<'a> {
         SingleBlockIterator {
             iter: self.octree.iter(),
@@ -52,6 +79,118 @@ impl Chunk {
 
     pub fn iter<'a>(&'a self) -> OctreeIterator<'a, Block> {
         self.octree.iter()
+    }
+}
+
+pub fn cube_mesh(pos: Point3<f32>, size: f32, faces: &[bool; 6]) -> Vec<PosNormTangTex> {
+    // vertices
+    let base = Vector3::new(pos.x, pos.y, pos.z);
+    let v = [
+        base + Vector3::new(0.0, 0.0, size),
+        base + Vector3::new(size, 0.0, size),
+        base + Vector3::new(0.0, size, size),
+        base + Vector3::new(size, size, size),
+        base + Vector3::new(0.0, size, 0.0),
+        base + Vector3::new(size, size, 0.0),
+        base + Vector3::new(0.0, 0.0, 0.0),
+        base + Vector3::new(size, 0.0, 0.0),
+    ];
+    // textures
+    let tx = [
+        Vector2::new(0.0, 0.0),
+        Vector2::new(size, 0.0),
+        Vector2::new(0.0, size),
+        Vector2::new(size, size),
+    ];
+    // normal
+    let n = [
+        Vector3::new(0.0, 0.0, 1.0),
+        Vector3::new(0.0, 1.0, 0.0),
+        Vector3::new(0.0, 0.0, -1.0),
+        Vector3::new(0.0, -1.0, 0.0),
+        Vector3::new(1.0, 0.0, 0.0),
+        Vector3::new(-1.0, 0.0, 0.0),
+    ];
+    // tangent
+    let t = [
+        Vector3::new(-1.0, 0.0, 0.0),
+        Vector3::new(0.0, -1.0, 0.0),
+        Vector3::new(1.0, 0.0, 0.0),
+        Vector3::new(1.0, 0.0, 0.0),
+        Vector3::new(0.0, 0.0, -1.0),
+        Vector3::new(0.0, 0.0, 1.0),
+    ];
+
+    let vertex_count = faces.iter().map(|f| if *f { 6 } else { 0 }).sum();
+    let mut vec = Vec::with_capacity(vertex_count);
+
+    // Back
+    if faces[0] {
+        vec.push(pos_norm_tang_tex(v[0], n[0], t[0], tx[0]));
+        vec.push(pos_norm_tang_tex(v[1], n[0], t[0], tx[1]));
+        vec.push(pos_norm_tang_tex(v[2], n[0], t[0], tx[2]));
+        vec.push(pos_norm_tang_tex(v[2], n[0], t[0], tx[2]));
+        vec.push(pos_norm_tang_tex(v[1], n[0], t[0], tx[1]));
+        vec.push(pos_norm_tang_tex(v[3], n[0], t[0], tx[3]));
+    }
+    // Up
+    if faces[1] {
+        vec.push(pos_norm_tang_tex(v[2], t[1], n[1], tx[0]));
+        vec.push(pos_norm_tang_tex(v[3], t[1], n[1], tx[1]));
+        vec.push(pos_norm_tang_tex(v[4], t[1], n[1], tx[2]));
+        vec.push(pos_norm_tang_tex(v[4], t[1], n[1], tx[2]));
+        vec.push(pos_norm_tang_tex(v[3], t[1], n[1], tx[1]));
+        vec.push(pos_norm_tang_tex(v[5], t[1], n[1], tx[3]));
+    }
+    // Front
+    if faces[2] {
+        vec.push(pos_norm_tang_tex(v[4], t[2], n[2], tx[3]));
+        vec.push(pos_norm_tang_tex(v[5], t[2], n[2], tx[2]));
+        vec.push(pos_norm_tang_tex(v[6], t[2], n[2], tx[1]));
+        vec.push(pos_norm_tang_tex(v[6], t[2], n[2], tx[1]));
+        vec.push(pos_norm_tang_tex(v[5], t[2], n[2], tx[2]));
+        vec.push(pos_norm_tang_tex(v[7], t[2], n[2], tx[0]));
+    }
+    // Down
+    if faces[3] {
+        vec.push(pos_norm_tang_tex(v[6], t[3], n[3], tx[0]));
+        vec.push(pos_norm_tang_tex(v[7], t[3], n[3], tx[1]));
+        vec.push(pos_norm_tang_tex(v[0], t[3], n[3], tx[2]));
+        vec.push(pos_norm_tang_tex(v[0], t[3], n[3], tx[2]));
+        vec.push(pos_norm_tang_tex(v[7], t[3], n[3], tx[1]));
+        vec.push(pos_norm_tang_tex(v[1], t[3], n[3], tx[3]));
+    }
+    // Right
+    if faces[4] {
+        vec.push(pos_norm_tang_tex(v[1], t[4], n[4], tx[0]));
+        vec.push(pos_norm_tang_tex(v[7], t[4], n[4], tx[1]));
+        vec.push(pos_norm_tang_tex(v[3], t[4], n[4], tx[2]));
+        vec.push(pos_norm_tang_tex(v[3], t[4], n[4], tx[2]));
+        vec.push(pos_norm_tang_tex(v[7], t[4], n[4], tx[1]));
+        vec.push(pos_norm_tang_tex(v[5], t[4], n[4], tx[3]));
+    }
+    // Left
+    if faces[5] {
+        vec.push(pos_norm_tang_tex(v[6], t[5], n[5], tx[0]));
+        vec.push(pos_norm_tang_tex(v[0], t[5], n[5], tx[1]));
+        vec.push(pos_norm_tang_tex(v[4], t[5], n[5], tx[2]));
+        vec.push(pos_norm_tang_tex(v[4], t[5], n[5], tx[2]));
+        vec.push(pos_norm_tang_tex(v[0], t[5], n[5], tx[1]));
+        vec.push(pos_norm_tang_tex(v[2], t[5], n[5], tx[3]));
+    }
+    return vec;
+}
+fn pos_norm_tang_tex(
+    position: Vector3<f32>,
+    normal: Vector3<f32>,
+    tangent: Vector3<f32>,
+    tex_coord: Vector2<f32>,
+) -> PosNormTangTex {
+    PosNormTangTex {
+        position,
+        normal,
+        tangent,
+        tex_coord,
     }
 }
 
@@ -104,23 +243,25 @@ impl<'a> Iterator for SingleBlockIterator<'a> {
 }
 
 pub struct ChunkBuilder {
+    pos: Point3<i32>,
     tree: Octree<Block>,
 }
 
 impl ChunkBuilder {
-    pub fn new() -> Self {
+    pub fn new(pos: Point3<i32>) -> Self {
         ChunkBuilder {
+            pos,
             tree: gen_subtree(Point3::new(0, 0, 0), 8),
         }
     }
 
-    fn with_tree(tree: Octree<Block>) -> Self {
-        ChunkBuilder { tree }
+    fn with_tree(pos: Point3<i32>, tree: Octree<Block>) -> Self {
+        ChunkBuilder { pos, tree }
     }
 
     pub fn build(mut self) -> Chunk {
         self.tree.compress();
-        Chunk::new(self.tree)
+        Chunk::new(self.pos, self.tree)
     }
 }
 
@@ -134,7 +275,7 @@ impl ParallelIterator for ChunkBuilder {
         use crate::octree::{octree_data::OctreeData::Node, parallel_drive_node_children};
         match self.tree.data() {
             Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
-                ChunkBuilder::with_tree(node.clone())
+                ChunkBuilder::with_tree(self.pos, node.clone())
                     .into_par_iter()
                     .drive_unindexed(cnsmr)
             }),
@@ -165,13 +306,29 @@ impl<'data> ParallelIterator for IterMut<'data> {
         C: UnindexedConsumer<Self::Item>,
     {
         if self.tree.is_node() {
-            parallel_drive_mut_node_children(self.tree.mut_children(), consumer, |node, cnsmr| {
-                (IterMut {
-                    tree: Arc::make_mut(node),
-                })
-                .into_par_iter()
-                .drive_unindexed(cnsmr)
-            })
+            if self.tree.height() == 1 {
+                consumer
+                    .into_folder()
+                    .consume_iter(
+                        self.tree
+                            .mut_children()
+                            .into_iter()
+                            .map(|arc| Arc::get_mut(arc).unwrap()),
+                    )
+                    .complete()
+            } else {
+                parallel_drive_mut_node_children(
+                    self.tree.mut_children(),
+                    consumer,
+                    |node, cnsmr| {
+                        (IterMut {
+                            tree: Arc::make_mut(node),
+                        })
+                        .into_par_iter()
+                        .drive_unindexed(cnsmr)
+                    },
+                )
+            }
         } else {
             consumer.into_folder().consume(self.tree).complete()
         }
@@ -180,15 +337,9 @@ impl<'data> ParallelIterator for IterMut<'data> {
 
 macro_rules! node_index {
     ($node:expr, $i:expr) => {
-        unsafe { $node.ptr.add($i).as_mut().unwrap() }
+        unsafe { $node.0.add($i).as_mut().unwrap() }
     };
 }
-
-struct MultiThreadMutPtr<T> {
-    ptr: *mut T,
-}
-unsafe impl<T> Send for MultiThreadMutPtr<T> {}
-unsafe impl<T> Sync for MultiThreadMutPtr<T> {}
 
 pub fn parallel_drive_mut_node_children<'a, ITEM, E, C, F>(
     nodes: &'a mut [Arc<Octree<E>>; 8],
@@ -200,9 +351,7 @@ where
     C: UnindexedConsumer<ITEM>,
     F: Fn(&'a mut Arc<Octree<E>>, C) -> C::Result + Send + Sync,
 {
-    let nodes_ptr = MultiThreadMutPtr {
-        ptr: nodes.as_mut_ptr(),
-    };
+    let nodes_ptr = MultiThreadMutPtr::new(nodes.as_mut_ptr());
     let reducer = consumer.to_reducer();
     let (left_half, right_half) = (consumer.split_off_left(), consumer);
     let (ll_quarter, lr_quarter, rl_quarter, rr_quarter) = (
@@ -265,23 +414,6 @@ where
     );
     reducer.reduce(left, right)
 }
-//impl<'data> ParallelIterator for &'data mut ChunkBuilder {
-//    type Item = &'data mut Octree<Block>;
-//
-//    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-//    where
-//        C: UnindexedConsumer<Self::Item>,
-//    {
-//        use crate::octree::{parallel_drive_node_children, OctreeData::Node};
-//        match self.tree.data() {
-//            Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
-//                let mut chunk_builder = ChunkBuilder::with_tree(node.clone());
-//                chunk_builder.par_iter_mut().drive_unindexed(cnsmr)
-//            }),
-//            _ => consumer.into_folder().consume(&mut self.tree).complete(),
-//        }
-//    }
-//}
 
 fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
     // Base case
@@ -382,7 +514,7 @@ fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
                 Arc::new(llh),
                 Arc::new(lll),
             ]),
-            OctantDimensions::new(pos, Number::pow(2, height)),
+            OctantDimensions::new(pos, u16::pow(2, height)),
             height,
         )
     }
@@ -390,10 +522,11 @@ fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
 #[cfg(test)]
 mod test {
     use super::{Chunk, Point3};
+    use crate::octree::Octree;
 
     #[test]
     fn test_chunk_iterator() {
-        let mut chunk = Chunk::default();
+        let mut chunk = Chunk::new(Point3::new(0, 0, 0), Octree::with_uniform_dimension(8));
         chunk
             .place_block(Point3::new(0, 0, 0), 1)
             .place_block(Point3::new(0, 0, 1), 2)
@@ -419,7 +552,7 @@ mod test {
 
     #[test]
     fn test_chunk_insertions() {
-        let mut chunk = Chunk::default();
+        let mut chunk = Chunk::new(Point3::new(0, 0, 0), Octree::with_uniform_dimension(8));
         for _ in 0..1000 {
             chunk.place_block(
                 Point3::new(

@@ -1,58 +1,20 @@
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::geometry::Point3;
-// Represnt each possible Octant as a sum type.
-#[derive(PartialEq, Clone, Eq, Copy, Debug)]
+
+/// Represnt each possible Octant as a sum type.
+#[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
 pub enum Octant {
     // x, y, z
-    HighHighHigh,
-    HighHighLow,
-    HighLowHigh,
-    HighLowLow,
-    LowHighHigh,
-    LowHighLow,
-    LowLowHigh,
-    LowLowLow,
+    HighHighHigh = 0,
+    HighHighLow = 1,
+    HighLowHigh = 2,
+    HighLowLow = 3,
+    LowHighHigh = 4,
+    LowHighLow = 5,
+    LowLowHigh = 6,
+    LowLowLow = 7,
 }
 use self::Octant::*;
-
-macro_rules! octant_num_conversions {
-    ($( $num:ty ),* ) => {
-        $(
-            impl Into<$num> for Octant {
-                fn into(self) -> $num {
-                    match self {
-                        HighHighHigh => 0,
-                        HighHighLow => 1,
-                        HighLowHigh => 2,
-                        HighLowLow => 3,
-                        LowHighHigh => 4,
-                        LowHighLow => 5,
-                        LowLowHigh => 6,
-                        LowLowLow => 7,
-                    }
-                }
-            }
-
-            impl From<$num> for Octant {
-                fn from(num: $num) -> Self {
-                    match num {
-                        0 => HighHighHigh,
-                        1 => HighHighLow,
-                        2 => HighLowHigh,
-                        3 => HighLowLow,
-                        4 => LowHighHigh,
-                        5 => LowHighLow,
-                        6 => LowLowHigh,
-                        7 => LowLowLow,
-                        _ => panic!("Tried to create more than 8 elements in an octree"),
-                    }
-                }
-            }
-        )*
-    };
-}
-
-octant_num_conversions!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
 
 impl Octant {
     fn is_x_high(&self) -> bool {

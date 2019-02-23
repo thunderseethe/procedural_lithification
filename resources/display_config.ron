@@ -1,6 +1,6 @@
 (
   title: "cubes",
-  dimensions: None,
+  dimensions: Some((1600, 900)),
   max_dimensions: None,
   min_dimensions: None,
   fullscreen: false,

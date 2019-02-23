@@ -1,4 +1,4 @@
-use crate::terrain::OrdPoint3;
+use crate::mut_ptr::MultiThreadMutPtr;
 use amethyst::core::nalgebra::geometry::Point3;
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
@@ -6,16 +6,18 @@ use std::{borrow::Borrow, collections::VecDeque, fmt, sync::Arc};
 
 pub mod octant;
 pub mod octant_dimensions;
+pub mod octant_face;
 pub mod octree_data;
 
 use octant::Octant::*;
 use octant_dimensions::OctantDimensions;
+use octant_face::OctantFace;
 use octree_data::{OctreeData, OctreeData::*};
 
 // Alias to allow for easy swapping of position type.
-pub type Number = u16;
+pub type Number = u8;
 
-//#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Octree<E> {
     data: OctreeData<E>,
     bounds: OctantDimensions,
@@ -48,18 +50,18 @@ impl<E> Clone for Octree<E> {
     }
 }
 
-impl<E: fmt::Debug + PartialEq> Octree<E> {
+impl<E: PartialEq> Octree<E> {
     pub fn new(pos: Point3<Number>, opt: Option<E>, height: u32) -> Self {
         let data = opt.map_or(Empty, |elem| Leaf(Arc::new(elem)));
         Octree {
             data,
-            bounds: OctantDimensions::new(pos, Number::pow(2, height)),
+            bounds: OctantDimensions::new(pos, u16::pow(2, height)),
             height: height,
         }
     }
 
     pub fn with_uniform_dimension(power_of_2: u32) -> Self {
-        let diameter: Number = Number::pow(2, power_of_2);
+        let diameter: u16 = u16::pow(2, power_of_2);
         //let radius = diameter / 2;
         let bounds = OctantDimensions::new(Point3::new(0, 0, 0), diameter);
         Octree {
@@ -76,7 +78,7 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
         let nodes: [Arc<Octree<E>>; 8] = children.into();
         Octree {
             data: Node(nodes),
-            bounds: OctantDimensions::new(pos, Number::pow(2, height)),
+            bounds: OctantDimensions::new(pos, u16::pow(2, height)),
             height,
         }
         .compress_nodes()
@@ -90,7 +92,55 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
         }
     }
 
+    pub fn face_boundary_adjacent(&self, dim: &OctantDimensions, face: OctantFace) -> bool {
+        use octant_face::OctantFace::*;
+        match face {
+            Back => dim.z_max() >= self.bounds.z_max(),
+            Up => dim.y_max() >= self.bounds.y_max(),
+            Front => dim.z_min() <= self.bounds.z_min(),
+            Down => dim.y_min() >= self.bounds.y_min(),
+            Right => dim.x_max() >= self.bounds.x_max(),
+            Left => dim.x_min() <= self.bounds.x_min(),
+        }
+    }
+
+    pub fn check_octant_face_visible<P>(&self, pos: P, diameter: u16) -> bool
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        if self.outside_bounds(pos.borrow()) {
+            true
+        } else {
+            self.check_octant_face_visible_(pos, diameter)
+        }
+    }
+    fn check_octant_face_visible_<P>(&self, pos: P, diameter: u16) -> bool
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        match self.data {
+            Empty => true,
+            // When we encounter a leaf node our face is visible if the leaf node is smaller than our the node we're drawing
+            Leaf(_) => self.bounds.diameter() < diameter,
+            Node(ref octants) => {
+                let index: usize = self.bounds.get_octant_index(pos.borrow());
+                octants[index].check_octant_face_visible_(pos, diameter)
+            }
+        }
+    }
+
     pub fn get<P>(&self, pos: P) -> Option<Arc<E>>
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        if self.outside_bounds(pos.borrow()) {
+            None
+        } else {
+            self.get_(pos)
+        }
+    }
+
+    fn get_<P>(&self, pos: P) -> Option<Arc<E>>
     where
         P: Borrow<Point3<Number>>,
     {
@@ -98,7 +148,7 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
             Empty => None,
             Leaf(ref elem) => Some(elem.clone()),
             Node(ref octants) => {
-                let index: usize = self.bounds.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant_index(pos.borrow());
                 octants[index].get(pos)
             }
         }
@@ -118,6 +168,9 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
 
     pub fn root_point(&self) -> Point3<Number> {
         self.bounds.bottom_left()
+    }
+    pub fn bounds<'a>(&'a self) -> &'a OctantDimensions {
+        &self.bounds
     }
 
     pub fn data<'a>(&'a self) -> &'a OctreeData<E> {
@@ -161,7 +214,7 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
             Leaf(ref curr_leaf) => self.create_sub_nodes(pos, Empty, Leaf(curr_leaf.clone())),
             Node(ref old_nodes) => {
                 let mut nodes = old_nodes.clone();
-                let index: usize = self.bounds.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant_index(pos.borrow());
                 let old_octant: &Arc<Octree<E>> = &old_nodes[index];
                 nodes[index] = Arc::new(old_octant.delete(pos));
                 self.with_data(Node(nodes)).compress_nodes()
@@ -213,7 +266,7 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
             }
             Node(ref old_nodes) => {
                 let mut nodes = old_nodes.clone();
-                let index: usize = self.bounds.get_octant(pos.borrow()).into();
+                let index: usize = self.bounds.get_octant_index(pos.borrow());
                 let old_octant: &Arc<Octree<E>> = &old_nodes[index];
                 nodes[index] = Arc::new(old_octant.ins(pos, data));
                 self.with_data(Node(nodes)).compress_nodes()
@@ -238,9 +291,14 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
     pub fn compress(&mut self) {
         match &mut self.data {
             Node(ref mut nodes) => {
-                nodes
-                    .iter_mut()
-                    .for_each(|node| Arc::get_mut(node).unwrap().compress());
+                //nodes
+                //    .iter_mut()
+                //    .for_each(|node| Arc::get_mut(node).unwrap().compress());
+                unsafe {
+                    par_for_each_node(nodes, |arc_child: &mut Arc<Octree<E>>| {
+                        Arc::get_mut(arc_child).unwrap().compress();
+                    });
+                }
                 let mut data = nodes.iter().map(|node| &node.data);
                 if data.next().map_or(true, |head| data.all(|ele| head == ele)) {
                     self.data = nodes[0].data.clone();
@@ -292,6 +350,122 @@ impl<E: fmt::Debug + PartialEq> Octree<E> {
         stack.push_back(self);
         OctreeIterator { node_stack: stack }
     }
+
+    pub fn neighbor_iter<'a>(&'a self) -> NeighborOctreeIter<'a, E> {
+        let mut stack = VecDeque::new();
+        stack.push_back(OctreeContext::with_root(self));
+        NeighborOctreeIter { stack }
+    }
+
+    pub fn par_neighbor_iter<'a>(&'a self) -> ParallelNeighborOctreeIter<'a, E> {
+        ParallelNeighborOctreeIter {
+            curr_ctxt: OctreeContext::with_root(self),
+        }
+    }
+}
+
+// A stack of octrees up to the root tree at the top level, acts as a linked list of references.
+//#[derive(Clone)]
+pub struct OctreeContext<'a, E> {
+    tree: &'a Octree<E>,
+    parent: Option<Arc<OctreeContext<'a, E>>>,
+}
+impl<'a, E: PartialEq> OctreeContext<'a, E> {
+    pub fn with_root(tree: &'a Octree<E>) -> Self {
+        OctreeContext { parent: None, tree }
+    }
+
+    pub fn current_value(&self) -> &'a Octree<E> {
+        self.tree
+    }
+
+    pub fn check_position<P>(&self, pos: P) -> bool
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        self.parent.as_ref().map_or(false, |parent_ctx| {
+            if parent_ctx.tree.outside_bounds(pos.borrow()) {
+                parent_ctx.check_position(pos)
+            } else {
+                parent_ctx.tree.get(pos).is_some()
+            }
+        })
+    }
+
+    pub fn append_child(self, child: &'a Octree<E>) -> Self {
+        OctreeContext {
+            parent: Some(Arc::new(self)),
+            tree: child,
+        }
+    }
+}
+impl<'a, E> Clone for OctreeContext<'a, E> {
+    fn clone(&self) -> Self {
+        OctreeContext {
+            tree: self.tree,
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+pub struct ParallelNeighborOctreeIter<'a, E> {
+    curr_ctxt: OctreeContext<'a, E>,
+}
+impl<'a, E: Send + Sync + PartialEq> ParallelIterator for ParallelNeighborOctreeIter<'a, E> {
+    type Item = OctreeContext<'a, E>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        let tree = &self.curr_ctxt.tree;
+        let data = &tree.data;
+        let child_ctxt = self.curr_ctxt.clone().append_child(tree);
+        match data {
+            Empty => consumer.into_folder().complete(),
+            Leaf(_) => consumer.into_folder().consume(child_ctxt).complete(),
+            Node(nodes) => parallel_drive_node_children(&nodes, consumer, |_, consumer| {
+                (ParallelNeighborOctreeIter {
+                    curr_ctxt: child_ctxt.clone(),
+                })
+                .into_par_iter()
+                .drive_unindexed(consumer)
+            }),
+        }
+    }
+}
+
+pub struct NeighborOctreeIter<'a, E> {
+    stack: VecDeque<OctreeContext<'a, E>>,
+}
+impl<'a, E: fmt::Debug + PartialEq> Iterator for NeighborOctreeIter<'a, E> {
+    type Item = OctreeContext<'a, E>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let mut opt_context = self.stack.pop_front();
+            while let Some(context) = opt_context {
+                match &context.tree.data {
+                    Empty => {}
+                    Leaf(_) => {
+                        //let context = context;
+                        let tree = context.tree;
+                        return Some(context.append_child(tree));
+                    }
+                    Node(ref children) => {
+                        let children_iter = children
+                            .into_iter()
+                            .map(|arc| arc.as_ref())
+                            .filter(|node_ref| !node_ref.is_empty())
+                            .map(|node| context.clone().append_child(node));
+                        self.stack.extend(children_iter);
+                    }
+                }
+                opt_context = self.stack.pop_front();
+            }
+            return None;
+        }
+    }
 }
 
 impl<E: Send + Sync> IntoParallelIterator for Octree<E> {
@@ -305,6 +479,46 @@ impl<E: Send + Sync> IntoParallelIterator for Octree<E> {
 
 pub struct ParallelOctreeIter<E> {
     node: Octree<E>,
+}
+
+pub unsafe fn par_for_each_node<E, F>(nodes: &mut [Arc<Octree<E>>; 8], node_op: F)
+where
+    F: Fn(&mut Arc<Octree<E>>) -> () + Send + Sync,
+{
+    let node = MultiThreadMutPtr::new(nodes.as_mut_ptr());
+    rayon::join(
+        || {
+            rayon::join(
+                || {
+                    rayon::join({ || node_op(node.0.as_mut().unwrap()) }, {
+                        || node_op(node.0.add(1).as_mut().unwrap())
+                    })
+                },
+                || {
+                    rayon::join(
+                        || node_op(node.0.add(2).as_mut().unwrap()),
+                        || node_op(node.0.add(3).as_mut().unwrap()),
+                    )
+                },
+            )
+        },
+        || {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || node_op(node.0.add(4).as_mut().unwrap()),
+                        || node_op(node.0.add(5).as_mut().unwrap()),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || node_op(node.0.add(6).as_mut().unwrap()),
+                        || node_op(node.0.add(7).as_mut().unwrap()),
+                    )
+                },
+            )
+        },
+    );
 }
 
 pub fn parallel_drive_node_children<'a, ITEM, E, C, F>(

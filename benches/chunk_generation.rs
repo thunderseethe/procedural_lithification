@@ -2,18 +2,15 @@
 extern crate criterion;
 extern crate cubes_lib;
 
-use criterion::{Criterion, Fun};
+use amethyst::core::nalgebra::Point3;
+use criterion::{Criterion};
 use cubes_lib::terrain::Terrain;
 use std::time::Duration;
 
 fn chunk_generation(c: &mut Criterion) {
-    let safe_gen = Fun::new("ChunkBuilder", |b, _| {
-        b.iter(|| Terrain::new(0.0).generate_chunk())
+    c.bench_function("Chunk Generation", |b| {
+        b.iter(|| Terrain::new().generate_chunk(Point3::new(0, 0, 0)));
     });
-    let unsafe_gen = Fun::new("Bare Rayon", |b, _| {
-        b.iter(|| Terrain::new(0.0).old_generate_chunk())
-    });
-    c.bench_functions("Chunk Generation", vec![safe_gen, unsafe_gen], &5);
 }
 
 criterion_group! {

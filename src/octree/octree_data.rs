@@ -1,8 +1,8 @@
 use super::Octree;
 
-use std::{sync::Arc, fmt::Debug};
+use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum OctreeData<E> {
     Node([Arc<Octree<E>>; 8]),
     Leaf(Arc<E>),

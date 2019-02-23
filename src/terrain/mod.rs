@@ -1,20 +1,19 @@
 use crate::octree::octree_data::OctreeData::Leaf;
 use amethyst::core::nalgebra::{Point3, Scalar};
-use noise::{NoiseFn, OpenSimplex, Perlin};
+use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 use std::{
+    borrow::Borrow,
     cmp::{Ord, Ordering},
-    fmt, ptr,
+    fmt,
     sync::Arc,
 };
 
-use crate::chunk::{Block, Chunk, ChunkBuilder, DIRT_BLOCK};
-use crate::octree::{Number, octant_dimensions::OctantDimensions, Octree};
+use crate::chunk::{Chunk, ChunkBuilder, DIRT_BLOCK};
+use crate::octree::Number;
 
 pub struct Terrain {
-    simplex: OpenSimplex,
     perlin: Perlin,
-    block_threshold: f64,
 }
 
 // Wrapper to provide ordering for points so they can be sorted.
@@ -70,104 +69,46 @@ impl<N: Scalar> From<Point3<N>> for OrdPoint3<N> {
     }
 }
 
-fn triplets(max: u16) -> impl ParallelIterator<Item = (u16, u16, u16)> {
-    (0u16..max).into_par_iter().flat_map(move |x| {
-        (0u16..max)
-            .into_par_iter()
-            .flat_map(move |y| (0u16..max).into_par_iter().map(move |z| (x, y, z)))
-    })
-}
-
-#[inline(always)]
-pub fn index(size: usize, x: usize, y: usize, z: usize) -> usize {
-    ((x * size * size) + (y * size) + z) * 8
-}
-
-type ParentOctantVec = Vec<(OrdPoint3<Number>, Octree<Block>)>;
 impl Terrain {
-    pub fn new(threshold: f64) -> Self {
+    pub fn new() -> Self {
         Terrain {
-            simplex: OpenSimplex::new(),
             perlin: Perlin::new(),
-            block_threshold: threshold,
         }
     }
 
-    pub fn generate_block(&self, x: f64, y: f64, z: f64) -> Option<Block> {
-        //let p = [x / 10.0, y / 10.0, z / 10.0];
-        //let e = self.perlin.get(p);
-        if y < 128.0 {
-            Some(DIRT_BLOCK)
-        } else {
-            None
-        }
-    }
-
-    pub fn generate_chunk(&self) -> Chunk {
-        let mut chunk_to_be = ChunkBuilder::new();
+    pub fn generate_chunk<P>(&self, chunk_pos_ref: P) -> Chunk
+    where
+        P: Borrow<Point3<i32>>,
+    {
+        let chunk_pos = chunk_pos_ref.borrow();
+        let height_map: [[u8; 256]; 256] = array_init::array_init(|x| {
+            array_init::array_init(|z| {
+                let nx = (chunk_pos.x as f64) + (x as f64 / 256.0) - 0.5;
+                let nz = (chunk_pos.z as f64) + (z as f64 / 256.0) - 0.5;
+                let noise = self.perlin.get([nx, nz])
+                    + 0.5 * self.perlin.get([2.0 * nx, 2.0 * nz])
+                    + 0.25 * self.perlin.get([4.0 * nx, 4.0 * nz])
+                    + 0.13 * self.perlin.get([8.0 * nx, 8.0 * nz])
+                    + 0.06 * self.perlin.get([16.0 * nx, 16.0 * nz])
+                    + 0.03 * self.perlin.get([32.0 * nx, 32.0 * nz]);
+                let noise = noise / (1.0 + 0.5 + 0.25 + 0.13 + 0.06 + 0.03);
+                ((noise / 2.0 + 0.5) * 256.0).ceil() as u8
+            })
+        });
+        let generate_block = |p: Point3<Number>| {
+            let subarray: [u8; 256] = height_map[p.x as usize];
+            let height: u8 = subarray[p.z as usize];
+            if p.y <= height {
+                Some(DIRT_BLOCK)
+            } else {
+                None
+            }
+        };
+        let mut chunk_to_be = ChunkBuilder::new(*chunk_pos);
         chunk_to_be.par_iter_mut().for_each(|leaf| {
             let pos = leaf.root_point();
-            self.generate_block(pos.x as f64, pos.y as f64, pos.z as f64)
-                .map(|block| leaf.set_data(Leaf(Arc::new(block))));
+            generate_block(pos).map(|block| leaf.set_data(Leaf(Arc::new(block))));
         });
         chunk_to_be.build()
-    }
-
-    pub fn old_generate_chunk(&self) -> Chunk {
-        let xyzs = triplets(256);
-
-        let mut intermediate_octrees: Vec<Octree<Block>> = xyzs
-            .map(|(x, y, z)| {
-                Octree::new(
-                    Point3::new(x, y, z),
-                    self.generate_block(x as f64, y as f64, z as f64),
-                    0,
-                )
-            })
-            .collect();
-
-        for height in 0..8 {
-            let mut v = Terrain::find_parent_octants(intermediate_octrees.clone().into_par_iter());
-            Terrain::sort_octants(&mut v);
-            v.into_par_iter()
-                .chunks(8)
-                .map(|octants| {
-                    let parent_pos: Point3<Number> = octants[0].0.clone().into();
-                    let children: [Arc<Octree<Block>>; 8] =
-                        array_init::array_init(|i| Arc::new(octants[i].1.clone()));
-                    Octree::with_children(children, parent_pos, height + 1)
-                })
-                .collect_into_vec(&mut intermediate_octrees);
-        }
-        Chunk::new(intermediate_octrees[0].clone())
-    }
-
-    fn find_parent_octants<I>(node_iter: I) -> ParentOctantVec
-    where
-        I: ParallelIterator<Item = Octree<Block>>,
-    {
-        node_iter
-            .map(|octree| {
-                let nearest = OctantDimensions::nearest_octant_point(
-                    octree.root_point(),
-                    octree.height() + 1,
-                )
-                .into();
-                (nearest, octree)
-            })
-            .collect()
-    }
-
-    fn sort_octants(nodes: &mut ParentOctantVec) {
-        nodes.par_sort_by(|(octant_a, octree_a), (octant_b, octree_b)| {
-            let parent_octants = octant_a.cmp(octant_b);
-            if parent_octants == Ordering::Equal {
-                let a = OrdPoint3::new(octree_a.root_point());
-                let b = OrdPoint3::new(octree_b.root_point());
-                b.cmp(&a)
-            } else {
-                parent_octants
-            }
-        })
     }
 }
