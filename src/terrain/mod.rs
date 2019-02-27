@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::chunk::{Chunk, ChunkBuilder, DIRT_BLOCK};
+use crate::chunk::{block::DIRT_BLOCK, chunk_builder::ChunkBuilder, Chunk};
 use crate::octree::Number;
 
 pub struct Terrain {
@@ -77,6 +77,20 @@ impl Terrain {
     }
 
     pub fn generate_chunk<P>(&self, chunk_pos_ref: P) -> Chunk
+    where
+        P: Borrow<Point3<i32>>,
+    {
+        let chunk_pos = chunk_pos_ref.borrow();
+        if chunk_pos.y > 0 {
+            Chunk::with_empty(*chunk_pos)
+        } else if chunk_pos.y < 0 {
+            Chunk::with_block(*chunk_pos, DIRT_BLOCK)
+        } else {
+            self.y_zero_chunk_generator(chunk_pos)
+        }
+    }
+
+    fn y_zero_chunk_generator<P>(&self, chunk_pos_ref: P) -> Chunk
     where
         P: Borrow<Point3<i32>>,
     {

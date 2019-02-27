@@ -6,9 +6,9 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
     IntoParallelRefMutIterator, ParallelIterator,
 };
-use std::{borrow::Borrow, mem, path::Path, vec::Vec};
+use std::{borrow::Borrow, fs::File as SyncFile, mem, path::Path, vec::Vec};
 use tokio::{
-    fs::{File, OpenOptions},
+    fs::{File as AsyncFile, OpenOptions},
     prelude::*,
     runtime::Runtime,
 };
@@ -77,13 +77,11 @@ impl DimensionStorage {
     {
         let morton = pos.into();
         let chunk_path = dir.as_ref().join(CHUNK_DIR).join(format!("{}", morton));
-        File::open(chunk_path)
-            .then(|file_res| match file_res {
-                Err(e) => Err(Box::new(bincode::ErrorKind::Io(e))),
-                Ok(file) => {
-                    let decoder = DeflateDecoder::new(file);
-                    deserialize_from(decoder)
-                }
+        SyncFile::open(chunk_path)
+            .map_err(|err| Box::new(bincode::ErrorKind::Io(err)))
+            .and_then(|file| {
+                let decoder = DeflateDecoder::new(file);
+                deserialize_from(decoder)
             })
             .map(|chunk| {
                 // We're overwriting whatever was previously present at this index.
@@ -95,7 +93,6 @@ impl DimensionStorage {
                 self.data.insert(indx, Mutex::new(chunk));
                 index_lock.insert(indx, morton);
             })
-            .wait()
     }
 
     pub fn get<'a, M>(&'a self, pos: M) -> Option<&'a Mutex<Chunk>>

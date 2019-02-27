@@ -3,27 +3,51 @@ extern crate cubes_lib;
 extern crate tokio;
 
 use amethyst::{
-    core::{nalgebra::Vector3, Transform, TransformBundle},
+    core::{
+        nalgebra::{Point3, Vector3},
+        Transform, TransformBundle,
+    },
     input::InputBundle,
     prelude::*,
     renderer::*,
     utils::application_root_dir,
 };
-
-use cubes_lib::systems::{
-    dimension_generation::DimensionBundle,
-    player::{PlayerControlBundle, PlayerControlTag},
+use cubes_lib::{
+    dimension::Dimension,
+    systems::{
+        dimension_generation::DimensionBundle,
+        player::{PlayerControlBundle, PlayerControlTag},
+    },
+    volume::Sphere,
 };
-
 use std::path::PathBuf;
+use tokio::prelude::Future;
+use tokio::runtime::Runtime;
 
 struct Gameplay {
     dimension_dir: PathBuf,
+    radius: i32,
 }
 
 impl Gameplay {
-    pub fn new(dimension_dir: PathBuf) -> Self {
-        Gameplay { dimension_dir }
+    pub fn new(dimension_dir: PathBuf, radius: i32) -> Self {
+        Gameplay {
+            dimension_dir,
+            radius,
+        }
+    }
+
+    pub fn init_dimension(&self, center: Point3<i32>) -> Dimension {
+        std::fs::create_dir_all(&self.dimension_dir).expect("Unable to create dimension directory");
+        let mut dimension = Dimension::new(self.dimension_dir.clone());
+        let sphere = Sphere::new(center, self.radius);
+        for point in sphere.iter() {
+            match dimension.create_or_load_chunk(point) {
+                Ok(_) => {}
+                Err(err) => println!("{:?}", err),
+            };
+        }
+        dimension
     }
 }
 
@@ -54,6 +78,16 @@ impl SimpleState for Gameplay {
             .with(transform)
             .with(PlayerControlTag::default())
             .build();
+
+        let runtime = Runtime::new().expect("Unable to create Tokio Runtime");
+        world.add_resource(runtime);
+
+        // Initialize a sphere of chunks around the origin.
+        let dimension = self.init_dimension(Point3::new(0, 0, 0));
+        {
+            dimension.store(&mut world.write_resource::<Runtime>());
+        }
+        world.add_resource(dimension);
     }
 
     fn handle_event(
@@ -106,7 +140,7 @@ fn main() -> amethyst::Result<()> {
                 Some(String::from("move_y")),
                 Some(String::from("move_z")),
             )
-            .with_speed(12.0)
+            .with_speed(124.0)
             .with_sensitivity(0.1, 0.1),
         )?
         .with_bundle(TransformBundle::new().with_dep(&["player_movement"]))?
@@ -117,7 +151,7 @@ fn main() -> amethyst::Result<()> {
         .with_bundle(DimensionBundle::new())?;
     let mut game = Application::new(
         &resources,
-        Gameplay::new(PathBuf::from(dimension_dir)),
+        Gameplay::new(PathBuf::from(dimension_dir), 4),
         game_data,
     )?;
     game.run();

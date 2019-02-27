@@ -180,7 +180,7 @@ impl<E: PartialEq> Octree<E> {
         self.data = data;
     }
 
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         match self.data {
             Empty => true,
             _ => false,

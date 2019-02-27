@@ -1,3 +1,4 @@
+use crate::dimension::Dimension;
 use amethyst::{
     controls::{CursorHideSystem, HideCursor, MouseFocusUpdateSystem, WindowFocus},
     core::{
@@ -7,7 +8,7 @@ use amethyst::{
         specs::{Component, DispatcherBuilder, Join, NullStorage, Resources},
         Time, Transform,
     },
-    ecs::{Read, ReadStorage, System, WriteStorage},
+    ecs::{Read, ReadStorage, System, WriteExpect, WriteStorage},
     input::{get_input_axis_simple, InputHandler},
     winit::{DeviceEvent, Event},
 };
@@ -60,11 +61,12 @@ where
     type SystemData = (
         Read<'a, Time>,
         WriteStorage<'a, Transform>,
+        WriteExpect<'a, Dimension>,
         Read<'a, InputHandler<A, B>>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (time, mut transform, input, tag): Self::SystemData) {
+    fn run(&mut self, (time, mut transform, mut dimension, input, tag): Self::SystemData) {
         let x = get_input_axis_simple(&self.right_input_axis, &input);
         let y = get_input_axis_simple(&self.up_input_axis, &input);
         let z = get_input_axis_simple(&self.forward_input_axis, &input);

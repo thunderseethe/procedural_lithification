@@ -7,11 +7,12 @@ use amethyst::{
 use array_init::array_init;
 use num_traits::FromPrimitive;
 use rayon::iter::{plumbing::*, *};
-use std::{borrow::Borrow, default::Default, sync::Arc};
+use std::{borrow::Borrow, sync::Arc};
 
-pub type Block = u32;
-pub static AIR_BLOCK: Block = 0;
-pub static DIRT_BLOCK: Block = 1;
+pub mod block;
+pub mod chunk_builder;
+
+use block::{Block, AIR_BLOCK, DIRT_BLOCK};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Chunk {
@@ -22,6 +23,24 @@ pub struct Chunk {
 impl Chunk {
     pub fn new(pos: Point3<i32>, octree: Octree<Block>) -> Self {
         Chunk { pos, octree }
+    }
+
+    pub fn with_block(pos: Point3<i32>, block: Block) -> Self {
+        Chunk {
+            pos,
+            octree: Octree::with_fields(
+                OctreeData::Leaf(Arc::new(block)),
+                OctantDimensions::new(Point3::new(0, 0, 0), 256),
+                8,
+            ),
+        }
+    }
+
+    pub fn with_empty(pos: Point3<i32>) -> Self {
+        Chunk {
+            pos,
+            octree: Octree::with_uniform_dimension(8),
+        }
     }
 
     pub fn get_block<P>(&self, pos: P) -> Block
@@ -41,33 +60,39 @@ impl Chunk {
         self
     }
 
-    pub fn generate_mesh(&self) -> MeshData {
+    pub fn generate_mesh(&self) -> Option<MeshData> {
         let root_octree = &self.octree;
-        self.octree
-            .clone()
-            .into_par_iter()
-            .map(|(dim, _)| {
-                let faces: [bool; 6] = array_init(|i| {
-                    let face = OctantFace::from_usize(i).unwrap();
-                    if root_octree.face_boundary_adjacent(&dim, face) {
-                        true
-                    } else {
-                        root_octree.check_octant_face_visible(
-                            dim.face_adjacent_point(face),
-                            dim.diameter(),
-                        )
-                    }
-                });
-                cube_mesh(convert(dim.bottom_left()), dim.diameter() as f32, &faces)
-            })
-            .reduce(
-                || Vec::new(),
-                |mut vec1, vec2| {
-                    vec1.extend(vec2);
-                    vec1
-                },
-            )
-            .into()
+        if self.octree.is_empty() {
+            None
+        } else {
+            let data = self
+                .octree
+                .clone()
+                .into_par_iter()
+                .map(|(dim, _)| {
+                    let faces: [bool; 6] = array_init(|i| {
+                        let face = OctantFace::from_usize(i).unwrap();
+                        if root_octree.face_boundary_adjacent(&dim, face) {
+                            true
+                        } else {
+                            root_octree.check_octant_face_visible(
+                                dim.face_adjacent_point(face),
+                                dim.diameter(),
+                            )
+                        }
+                    });
+                    cube_mesh(convert(dim.bottom_left()), dim.diameter() as f32, &faces)
+                })
+                .reduce(
+                    || Vec::new(),
+                    |mut vec1, vec2| {
+                        vec1.extend(vec2);
+                        vec1
+                    },
+                )
+                .into();
+            Some(data)
+        }
     }
 
     pub fn block_iter<'a>(&'a self) -> SingleBlockIterator<'a> {
@@ -242,99 +267,6 @@ impl<'a> Iterator for SingleBlockIterator<'a> {
     }
 }
 
-pub struct ChunkBuilder {
-    pos: Point3<i32>,
-    tree: Octree<Block>,
-}
-
-impl ChunkBuilder {
-    pub fn new(pos: Point3<i32>) -> Self {
-        ChunkBuilder {
-            pos,
-            tree: gen_subtree(Point3::new(0, 0, 0), 8),
-        }
-    }
-
-    fn with_tree(pos: Point3<i32>, tree: Octree<Block>) -> Self {
-        ChunkBuilder { pos, tree }
-    }
-
-    pub fn build(mut self) -> Chunk {
-        self.tree.compress();
-        Chunk::new(self.pos, self.tree)
-    }
-}
-
-impl ParallelIterator for ChunkBuilder {
-    type Item = Octree<Block>;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        use crate::octree::{octree_data::OctreeData::Node, parallel_drive_node_children};
-        match self.tree.data() {
-            Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
-                ChunkBuilder::with_tree(self.pos, node.clone())
-                    .into_par_iter()
-                    .drive_unindexed(cnsmr)
-            }),
-            _ => consumer.into_folder().consume(self.tree).complete(),
-        }
-    }
-}
-
-impl<'data> IntoParallelIterator for &'data mut ChunkBuilder {
-    type Iter = IterMut<'data>;
-    type Item = <IterMut<'data> as ParallelIterator>::Item;
-
-    fn into_par_iter(self) -> Self::Iter {
-        IterMut {
-            tree: &mut self.tree,
-        }
-    }
-}
-
-pub struct IterMut<'data> {
-    tree: &'data mut Octree<Block>,
-}
-impl<'data> ParallelIterator for IterMut<'data> {
-    type Item = &'data mut Octree<Block>;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        if self.tree.is_node() {
-            if self.tree.height() == 1 {
-                consumer
-                    .into_folder()
-                    .consume_iter(
-                        self.tree
-                            .mut_children()
-                            .into_iter()
-                            .map(|arc| Arc::get_mut(arc).unwrap()),
-                    )
-                    .complete()
-            } else {
-                parallel_drive_mut_node_children(
-                    self.tree.mut_children(),
-                    consumer,
-                    |node, cnsmr| {
-                        (IterMut {
-                            tree: Arc::make_mut(node),
-                        })
-                        .into_par_iter()
-                        .drive_unindexed(cnsmr)
-                    },
-                )
-            }
-        } else {
-            consumer.into_folder().consume(self.tree).complete()
-        }
-    }
-}
-
 macro_rules! node_index {
     ($node:expr, $i:expr) => {
         unsafe { $node.0.add($i).as_mut().unwrap() }
@@ -415,110 +347,6 @@ where
     reducer.reduce(left, right)
 }
 
-fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
-    // Base case
-    if height == 0 {
-        Octree::new(pos, None, height)
-    } else {
-        let child_height = height - 1;
-        let dimension = Number::pow(2, child_height);
-        let (((hhh, hhl), (hlh, hll)), ((lhh, lhl), (llh, lll))) = rayon::join(
-            || {
-                rayon::join(
-                    || {
-                        rayon::join(
-                            /* 0 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(
-                                        pos.x + dimension,
-                                        pos.y + dimension,
-                                        pos.z + dimension,
-                                    ),
-                                    child_height,
-                                )
-                            },
-                            /* 1 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y + dimension, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                    || {
-                        rayon::join(
-                            /* 2 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 3 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                )
-            },
-            || {
-                rayon::join(
-                    || {
-                        rayon::join(
-                            /* 4 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y + dimension, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 5 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y + dimension, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                    || {
-                        rayon::join(
-                            /* 6 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 7 */
-                            || gen_subtree(Point3::new(pos.x, pos.y, pos.z), child_height),
-                        )
-                    },
-                )
-            },
-        );
-        Octree::with_fields(
-            OctreeData::Node([
-                Arc::new(hhh),
-                Arc::new(hhl),
-                Arc::new(hlh),
-                Arc::new(hll),
-                Arc::new(lhh),
-                Arc::new(lhl),
-                Arc::new(llh),
-                Arc::new(lll),
-            ]),
-            OctantDimensions::new(pos, u16::pow(2, height)),
-            height,
-        )
-    }
-}
 #[cfg(test)]
 mod test {
     use super::{Chunk, Point3};

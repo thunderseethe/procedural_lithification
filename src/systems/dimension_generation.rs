@@ -8,7 +8,7 @@ use amethyst::{
         specs::DispatcherBuilder,
         Transform,
     },
-    ecs::{Entities, Read, ReadExpect, Resources, System, WriteStorage},
+    ecs::{Entities, ReadExpect, System, WriteStorage},
     prelude::*,
     renderer::*,
 };
@@ -33,7 +33,7 @@ impl RenderDimensionSystem {
 impl<'a> System<'a> for RenderDimensionSystem {
     type SystemData = (
         Entities<'a>,
-        Read<'a, Dimension>,
+        ReadExpect<'a, Dimension>,
         ReadExpect<'a, MaterialDefaults>,
         WriteStorage<'a, Transform>,
         WriteStorage<'a, MeshHandle>,
@@ -41,21 +41,6 @@ impl<'a> System<'a> for RenderDimensionSystem {
         AssetLoaderSystemData<'a, Mesh>,
         AssetLoaderSystemData<'a, Texture>,
     );
-
-    fn setup(&mut self, res: &mut Resources) {
-        let mut dimension: Dimension = Dimension::default();
-        dimension.create_or_load_chunk(Point3::new(0, 0, 0));
-        dimension.create_or_load_chunk(Point3::new(1, 0, 0));
-        dimension.create_or_load_chunk(Point3::new(0, 0, 1));
-        let mut runtime = Runtime::new().unwrap();
-        {
-            dimension.store(&mut runtime);
-        }
-        runtime.shutdown_on_idle().wait();
-        res.insert(dimension);
-
-        self.run = false;
-    }
 
     fn run(
         &mut self,
@@ -87,19 +72,21 @@ impl<'a> System<'a> for RenderDimensionSystem {
                     let chunk = mtx_chunk.lock();
                     (chunk.pos, chunk.generate_mesh())
                 })
-                .for_each(|(point, mesh_data)| {
-                    let mut pos: Transform = Transform::default();
-                    pos.set_xyz(
-                        point.x as f32 * 256.0,
-                        point.y as f32 * 256.0,
-                        point.z as f32 * 256.0,
-                    );
-                    entities
-                        .build_entity()
-                        .with(pos, &mut transforms)
-                        .with(mesh_loader.load_from_data(mesh_data, ()), &mut meshes)
-                        .with(self.material.clone().unwrap(), &mut materials)
-                        .build();
+                .for_each(|(point, opt_mesh_data)| {
+                    if let Some(mesh_data) = opt_mesh_data {
+                        let mut pos: Transform = Transform::default();
+                        pos.set_xyz(
+                            point.x as f32 * 256.0,
+                            point.y as f32 * 256.0,
+                            point.z as f32 * 256.0,
+                        );
+                        entities
+                            .build_entity()
+                            .with(pos, &mut transforms)
+                            .with(mesh_loader.load_from_data(mesh_data, ()), &mut meshes)
+                            .with(self.material.clone().unwrap(), &mut materials)
+                            .build();
+                    }
                 })
         }
     }

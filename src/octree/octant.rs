@@ -1,5 +1,6 @@
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::geometry::Point3;
+use num_traits::FromPrimitive;
 
 /// Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
@@ -61,5 +62,28 @@ impl Octant {
             Point3::new(x_center, y_center, z_center),
             containing_bounds.diameter() / 2,
         )
+    }
+
+    /// Iterates over all variants of Octant
+    pub fn iter() -> OctantIter {
+        OctantIter::default()
+    }
+}
+
+pub struct OctantIter {
+    indx: u8,
+}
+impl Default for OctantIter {
+    fn default() -> Self {
+        OctantIter { indx: 0 }
+    }
+}
+impl Iterator for OctantIter {
+    type Item = Octant;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let octant = Octant::from_u8(self.indx);
+        self.indx += 1;
+        octant
     }
 }

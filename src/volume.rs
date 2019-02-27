@@ -150,7 +150,7 @@ mod test {
     use std::collections::HashSet;
 
     #[test]
-    fn unit_sphere_generates_expected_points() {
+    fn sphere_generates_expected_points() {
         let sphere = Sphere::with_origin(1);
         let results: HashSet<Point3<i32>> = sphere.iter().collect();
         let mut expected = HashSet::new();
@@ -162,28 +162,5 @@ mod test {
         expected.insert(Point3::new(0, -1, 0));
         expected.insert(Point3::new(-1, 0, 0));
         assert_eq!(results, expected);
-    }
-
-    #[test]
-    fn radius_4_sphere_generates_expected_points() {
-        let radius = 4;
-        let sphere = Sphere::with_origin(radius);
-        let result: HashSet<Point3<i32>> = sphere.iter().collect();
-        let r_2 = radius * radius;
-
-        for x in -16..16 {
-            for y in -16..16 {
-                for z in -16..16 {
-                    assert_eq!(
-                        result.contains(&Point3::new(x, y, z)),
-                        x * x + y * y + z * z <= r_2,
-                        "({}, {}, {})",
-                        x,
-                        y,
-                        z
-                    )
-                }
-            }
-        }
     }
 }

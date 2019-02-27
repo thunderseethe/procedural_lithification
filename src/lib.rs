@@ -1,3 +1,4 @@
+#![recursion_limit="128"]
 extern crate itertools;
 #[macro_use]
 extern crate num_derive;
@@ -14,12 +15,13 @@ extern crate rand;
 extern crate rayon;
 extern crate serde;
 extern crate tokio;
+extern crate toolshed;
 
 pub mod chunk;
 pub mod dimension;
 pub mod octree;
 pub mod systems;
 pub mod terrain;
-pub mod volumes;
+pub mod volume;
 
 mod mut_ptr;
