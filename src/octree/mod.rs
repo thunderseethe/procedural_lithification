@@ -1,7 +1,7 @@
 use crate::mut_ptr::MultiThreadMutPtr;
 use amethyst::core::nalgebra::geometry::Point3;
-use rayon::iter::plumbing::*;
-use rayon::prelude::*;
+use num_traits::FromPrimitive;
+use rayon::{iter::plumbing::*, prelude::*};
 use std::{borrow::Borrow, collections::VecDeque, fmt, sync::Arc};
 
 pub mod octant;
@@ -9,7 +9,7 @@ pub mod octant_dimensions;
 pub mod octant_face;
 pub mod octree_data;
 
-use octant::Octant::*;
+use octant::Octant;
 use octant_dimensions::OctantDimensions;
 use octant_face::OctantFace;
 use octree_data::{OctreeData, OctreeData::*};
@@ -62,7 +62,6 @@ impl<E: PartialEq> Octree<E> {
 
     pub fn with_uniform_dimension(power_of_2: u32) -> Self {
         let diameter: u16 = u16::pow(2, power_of_2);
-        //let radius = diameter / 2;
         let bounds = OctantDimensions::new(Point3::new(0, 0, 0), diameter);
         Octree {
             data: Empty,
@@ -98,7 +97,7 @@ impl<E: PartialEq> Octree<E> {
             Back => dim.z_max() >= self.bounds.z_max(),
             Up => dim.y_max() >= self.bounds.y_max(),
             Front => dim.z_min() <= self.bounds.z_min(),
-            Down => dim.y_min() >= self.bounds.y_min(),
+            Down => dim.y_min() <= self.bounds.y_min(),
             Right => dim.x_max() >= self.bounds.x_max(),
             Left => dim.x_min() <= self.bounds.x_min(),
         }
@@ -120,7 +119,7 @@ impl<E: PartialEq> Octree<E> {
     {
         match self.data {
             Empty => true,
-            // When we encounter a leaf node our face is visible if the leaf node is smaller than our the node we're drawing
+            // When we encounter a leaf node our face is visible if the leaf node is smaller than the node we're drawing
             Leaf(_) => self.bounds.diameter() < diameter,
             Node(ref octants) => {
                 let index: usize = self.bounds.get_octant_index(pos.borrow());
@@ -129,7 +128,7 @@ impl<E: PartialEq> Octree<E> {
         }
     }
 
-    pub fn get<P>(&self, pos: P) -> Option<Arc<E>>
+    pub fn get<P>(&self, pos: P) -> Option<&E>
     where
         P: Borrow<Point3<Number>>,
     {
@@ -140,16 +139,40 @@ impl<E: PartialEq> Octree<E> {
         }
     }
 
-    fn get_<P>(&self, pos: P) -> Option<Arc<E>>
+    fn get_<P>(&self, pos: P) -> Option<&E>
     where
         P: Borrow<Point3<Number>>,
     {
         match self.data {
             Empty => None,
-            Leaf(ref elem) => Some(elem.clone()),
+            Leaf(ref elem) => Some(elem.as_ref()),
             Node(ref octants) => {
                 let index: usize = self.bounds.get_octant_index(pos.borrow());
-                octants[index].get(pos)
+                octants[index].get_(pos)
+            }
+        }
+    }
+
+    pub fn get_octant<P>(&self, pos: P) -> Option<&Octree<E>>
+    where
+        P: Borrow<Point3<Number>>,
+    {
+        if self.outside_bounds(pos.borrow()) {
+            None
+        } else {
+            self.get_octant_unchecked(pos)
+        }
+    }
+    fn get_octant_unchecked<P>(&self, pos: P) -> Option<&Octree<E>>
+    where
+        P: Borrow<Point3<u8>>,
+    {
+        match self.data {
+            Empty => None,
+            Leaf(_) => Some(self),
+            Node(ref octants) => {
+                let index: usize = self.bounds.get_octant_index(pos.borrow());
+                octants[index].get_octant_unchecked(pos)
             }
         }
     }
@@ -164,6 +187,11 @@ impl<E: PartialEq> Octree<E> {
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    pub(crate) fn set_height(mut self, height: u32) -> Self {
+        self.height = height;
+        self
     }
 
     pub fn root_point(&self) -> Point3<Number> {
@@ -191,6 +219,19 @@ impl<E: PartialEq> Octree<E> {
         match self.data {
             Node(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn map<EF, LF, NF, O>(&self, empty_fn: EF, leaf_fn: LF, node_fn: NF) -> O
+    where
+        EF: FnOnce() -> O,
+        LF: FnOnce(&E) -> O,
+        NF: FnOnce(&[Arc<Octree<E>>; 8]) -> O,
+    {
+        match &self.data {
+            Empty => empty_fn(),
+            Leaf(arc_e) => leaf_fn(arc_e.as_ref()),
+            Node(ref nodes) => node_fn(nodes),
         }
     }
 
@@ -291,9 +332,6 @@ impl<E: PartialEq> Octree<E> {
     pub fn compress(&mut self) {
         match &mut self.data {
             Node(ref mut nodes) => {
-                //nodes
-                //    .iter_mut()
-                //    .for_each(|node| Arc::get_mut(node).unwrap().compress());
                 unsafe {
                     par_for_each_node(nodes, |arc_child: &mut Arc<Octree<E>>| {
                         Arc::get_mut(arc_child).unwrap().compress();
@@ -315,17 +353,8 @@ impl<E: PartialEq> Octree<E> {
         let modified_octant = self.bounds.get_octant(pos.borrow());
 
         let octree_nodes: [Arc<Octree<E>>; 8] = array_init::array_init(|i| {
-            let octant = match i {
-                0 => HighHighHigh,
-                1 => HighHighLow,
-                2 => HighLowHigh,
-                3 => HighLowLow,
-                4 => LowHighHigh,
-                5 => LowHighLow,
-                6 => LowLowHigh,
-                7 => LowLowLow,
-                _ => panic!("Tried to create more than 8 elements in an octree"),
-            };
+            let octant =
+                Octant::from_usize(i).expect("Tried to create more than 8 elements in an octree");
 
             let data = default.clone();
             let bounds = octant.sub_octant_bounds(&self.bounds);
@@ -476,9 +505,13 @@ impl<E: Send + Sync> IntoParallelIterator for Octree<E> {
         ParallelOctreeIter { node: self }
     }
 }
+impl<'a, E: Send + Sync> IntoParallelIterator for &'a Octree<E> {
+    type Iter = ParallelOctreeRefIter<'a, E>;
+    type Item = <<&'a Octree<E> as IntoParallelIterator>::Iter as ParallelIterator>::Item;
 
-pub struct ParallelOctreeIter<E> {
-    node: Octree<E>,
+    fn into_par_iter(self) -> Self::Iter {
+        ParallelOctreeRefIter { node: self }
+    }
 }
 
 pub unsafe fn par_for_each_node<E, F>(nodes: &mut [Arc<Octree<E>>; 8], node_op: F)
@@ -490,14 +523,14 @@ where
         || {
             rayon::join(
                 || {
-                    rayon::join({ || node_op(node.0.as_mut().unwrap()) }, {
-                        || node_op(node.0.add(1).as_mut().unwrap())
+                    rayon::join({ || node_op(node.element_at(0)) }, {
+                        || node_op(node.element_at(1))
                     })
                 },
                 || {
                     rayon::join(
-                        || node_op(node.0.add(2).as_mut().unwrap()),
-                        || node_op(node.0.add(3).as_mut().unwrap()),
+                        || node_op(node.element_at(2)),
+                        || node_op(node.element_at(3)),
                     )
                 },
             )
@@ -506,14 +539,14 @@ where
             rayon::join(
                 || {
                     rayon::join(
-                        || node_op(node.0.add(4).as_mut().unwrap()),
-                        || node_op(node.0.add(5).as_mut().unwrap()),
+                        || node_op(node.element_at(4)),
+                        || node_op(node.element_at(5)),
                     )
                 },
                 || {
                     rayon::join(
-                        || node_op(node.0.add(6).as_mut().unwrap()),
-                        || node_op(node.0.add(7).as_mut().unwrap()),
+                        || node_op(node.element_at(6)),
+                        || node_op(node.element_at(7)),
                     )
                 },
             )
@@ -593,6 +626,10 @@ where
     );
     reducer.reduce(left, right)
 }
+
+pub struct ParallelOctreeIter<E> {
+    node: Octree<E>,
+}
 impl<E: Send + Sync> ParallelIterator for ParallelOctreeIter<E> {
     type Item = (OctantDimensions, Arc<E>);
 
@@ -608,6 +645,29 @@ impl<E: Send + Sync> ParallelIterator for ParallelOctreeIter<E> {
                 .complete(),
             Node(nodes) => parallel_drive_node_children(&nodes, consumer, |node, consumer| {
                 node.clone().into_par_iter().drive_unindexed(consumer)
+            }),
+        }
+    }
+}
+
+pub struct ParallelOctreeRefIter<'a, E> {
+    node: &'a Octree<E>,
+}
+impl<'a, E: Send + Sync> ParallelIterator for ParallelOctreeRefIter<'a, E> {
+    type Item = (&'a OctantDimensions, &'a E);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        match &self.node.data {
+            Empty => consumer.into_folder().complete(),
+            Leaf(elem) => consumer
+                .into_folder()
+                .consume((&self.node.bounds, elem.as_ref()))
+                .complete(),
+            Node(nodes) => parallel_drive_node_children(&nodes, consumer, |node, consumer| {
+                node.into_par_iter().drive_unindexed(consumer)
             }),
         }
     }
@@ -718,10 +778,7 @@ mod test {
         let octree: Octree<i32> = Octree::with_uniform_dimension(4);
         let center = octree.bounds.center();
 
-        assert_eq!(
-            octree.insert(&center, 1234).get(&center),
-            Some(Arc::new(1234))
-        );
+        assert_eq!(octree.insert(&center, 1234).get(&center), Some(&1234));
     }
 
     #[test]
@@ -732,8 +789,8 @@ mod test {
             .insert(&p1, 1234)
             .insert(&p2, 5678);
 
-        assert_eq!(octree.get(&p1), Some(Arc::new(1234)));
-        assert_eq!(octree.get(&p2), Some(Arc::new(5678)));
+        assert_eq!(octree.get(&p1), Some(&1234));
+        assert_eq!(octree.get(&p2), Some(&5678));
     }
 
     #[test]
@@ -744,8 +801,8 @@ mod test {
             .insert(&p1, 1234)
             .insert(&p2, 5678);
 
-        assert_eq!(octree.get(&p1), Some(Arc::new(1234)));
-        assert_eq!(octree.get(&p2), Some(Arc::new(5678)));
+        assert_eq!(octree.get(&p1), Some(&1234));
+        assert_eq!(octree.get(&p2), Some(&5678));
     }
 
     #[test]
@@ -753,10 +810,10 @@ mod test {
         let p = Point3::new(1, 1, 1);
         let octree: Octree<i32> = Octree::with_uniform_dimension(4).insert(&p, 1234);
 
-        assert_eq!(octree.get(&p), Some(Arc::new(1234)));
+        assert_eq!(octree.get(&p), Some(&1234));
 
         let octree = octree.insert(&p, 5678);
-        assert_eq!(octree.get(&p), Some(Arc::new(5678)));
+        assert_eq!(octree.get(&p), Some(&5678));
     }
 
     #[test]
@@ -767,7 +824,7 @@ mod test {
             .insert(Point3::new(1, 1, 2), 4567)
             .insert(&p, 7890);
 
-        assert_eq!(octree.get(&p), Some(Arc::new(7890)));
+        assert_eq!(octree.get(&p), Some(&7890));
         let octree = octree.delete(&p);
         assert_eq!(octree.get(&p), None);
     }
@@ -880,5 +937,32 @@ mod test {
             );
         }
         println!("{:?}", octree.root_point());
+    }
+
+    #[test]
+    fn octree_returns_expected_octant() {
+        let octree = Octree::new(Point3::origin(), Some(1234), 8);
+        let octant = octree.get_octant(Point3::new(1, 1, 1));
+        assert!(octant.is_some());
+        assert_eq!(octant.unwrap().bounds.diameter(), 256);
+        assert_eq!(octant.unwrap().bounds.bottom_left, Point3::new(0, 0, 0));
+    }
+
+    #[test]
+    fn octree_returns_correct_sub_octant() {
+        let octree = Octree::new(Point3::origin(), Some(1234), 8);
+        let octree = octree.delete(Point3::new(1, 1, 1));
+        let octant = octree.get_octant(Point3::new(152, 140, 130));
+        assert_eq!(octant.unwrap().bounds.diameter(), 128);
+        assert_eq!(
+            octant.unwrap().bounds.bottom_left,
+            Point3::new(128, 128, 128)
+        )
+    }
+
+    #[test]
+    fn octree_reutrns_none_on_empty_octant() {
+        let octree: Octree<usize> = Octree::new(Point3::origin(), None, 8);
+        assert!(octree.get_octant(Point3::new(1, 2, 3)).is_none())
     }
 }

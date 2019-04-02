@@ -10,7 +10,7 @@ use std::{borrow::Borrow, cmp::Ordering, fmt};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OctantDimensions {
-    bottom_left: Point3<Number>,
+    pub bottom_left: Point3<Number>,
     diameter: u16,
 }
 
@@ -86,21 +86,21 @@ impl OctantDimensions {
         self.bottom_left.z + (self.diameter - 1) as u8
     }
 
-    pub fn top_right(&self) -> Point3<Number> {
-        let mut top_right = self.bottom_left.clone();
-        for e in top_right.iter_mut() {
-            *e += (self.diameter - 1) as u8;
-        }
-        return top_right;
+    pub fn top_right(&self) -> Point3<u16> {
+        return Point3::new(
+            self.bottom_left.x as u16 + self.diameter,
+            self.bottom_left.y as u16 + self.diameter,
+            self.bottom_left.z as u16 + self.diameter,
+        );
     }
 
     pub fn center(&self) -> Point3<Number> {
-        let radius = self.diameter / 2;
-        let mut center = self.bottom_left.clone();
-        for e in center.iter_mut() {
-            *e += radius as u8;
-        }
-        return center;
+        let radius = (self.diameter / 2) as u8;
+        return Point3::new(
+            self.bottom_left.x + radius,
+            self.bottom_left.y + radius,
+            self.bottom_left.z + radius,
+        );
     }
 
     pub fn bottom_left(&self) -> Point3<Number> {
@@ -129,8 +129,13 @@ impl OctantDimensions {
         P: Borrow<Point3<Number>>,
     {
         let pos = pos_ref.borrow();
-        let center = self.center();
-        match (pos.x >= center.x, pos.y >= center.y, pos.z >= center.z) {
+        //let center = self.center();
+        let r = (self.diameter / 2) as u8;
+        match (
+            pos.x >= self.bottom_left.x + r,
+            pos.y >= self.bottom_left.y + r,
+            pos.z >= self.bottom_left.z + r,
+        ) {
             (true, true, true) => HighHighHigh,
             (true, true, false) => HighHighLow,
             (true, false, true) => HighLowHigh,

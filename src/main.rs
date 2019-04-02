@@ -1,59 +1,170 @@
 extern crate amethyst;
 extern crate cubes_lib;
+extern crate dirs;
+extern crate itertools;
+extern crate parking_lot;
 extern crate tokio;
 
 use amethyst::{
+    assets::AssetLoaderSystemData,
     core::{
-        nalgebra::{Point3, Vector3},
-        Transform, TransformBundle,
+        nalgebra::{convert, Point3, Vector3},
+        ArcThreadPool, Transform, TransformBundle,
     },
+    ecs::{Join, ReadExpect},
     input::InputBundle,
     prelude::*,
-    renderer::*,
-    utils::application_root_dir,
+    renderer::{
+        AmbientColor, Camera, DirectionalLight, DisplayConfig, DrawShaded, DrawSkybox, Event,
+        FilterMethod, KeyboardInput, Light, Material, MaterialDefaults, Mesh, MeshHandle, Pipeline,
+        PngFormat, PosNormTex, Projection, RenderBundle, Rgba, SamplerInfo, Stage, Texture,
+        TextureMetadata, VirtualKeyCode, WindowEvent, WrapMode,
+    },
+    shrev::EventChannel,
 };
 use cubes_lib::{
-    dimension::Dimension,
+    chunk::{
+        chunk_builder::ChunkBuilder,
+        mesher::{Mesher, Quad},
+        Chunk,
+    },
+    dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
-        dimension_generation::DimensionBundle,
+        dimension::{DimensionBundle, DimensionChunkEvent},
         player::{PlayerControlBundle, PlayerControlTag},
     },
     volume::Sphere,
 };
-use std::path::PathBuf;
-use tokio::prelude::Future;
+use itertools::Itertools;
+use parking_lot::Mutex;
+use rayon::prelude::ParallelIterator;
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 
 struct Gameplay {
-    dimension_dir: PathBuf,
-    radius: i32,
+    dimension_config: DimensionConfig,
+    // Holds points that have been queued for generation so we don't re queue them
+    generate_queue_set: Arc<Mutex<HashSet<MortonCode>>>,
 }
 
 impl Gameplay {
-    pub fn new(dimension_dir: PathBuf, radius: i32) -> Self {
+    pub fn new(dimension_config: DimensionConfig) -> Self {
         Gameplay {
-            dimension_dir,
-            radius,
+            dimension_config,
+            generate_queue_set: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
-    pub fn init_dimension(&self, center: Point3<i32>) -> Dimension {
-        std::fs::create_dir_all(&self.dimension_dir).expect("Unable to create dimension directory");
-        let mut dimension = Dimension::new(self.dimension_dir.clone());
-        let sphere = Sphere::new(center, self.radius);
-        for point in sphere.iter() {
-            match dimension.create_or_load_chunk(point) {
-                Ok(_) => {}
-                Err(err) => println!("{:?}", err),
-            };
-        }
+    pub fn init_dimension(&self, runtime: &mut Runtime) -> Dimension {
+        std::fs::create_dir_all(&self.dimension_config.directory)
+            .expect("Unable to create dimension directory");
+        let mut dimension = Dimension::default();
+        //for point in Sphere::with_origin(4).into_iter() {
+        //    dimension
+        //        ._create_or_load_chunk(
+        //            self.dimension_config.directory.as_path(),
+        //            MortonCode::from(&point),
+        //            point,
+        //        )
+        //        .expect(&format!("Failed to create intial chunk at {:?}", point));
+        //}
         dimension
+            ._create_or_load_chunk(
+                self.dimension_config.directory.as_path(),
+                MortonCode::from_raw(0),
+                Point3::origin(),
+            )
+            .expect("It didn't work");
+        dimension.store(self.dimension_config.directory.as_path(), runtime);
+        dimension
+    }
+
+    pub fn render_initial_dimension(world: &mut World) {
+        let material = world.exec(
+            |(texture_loader, material_defaults): (
+                AssetLoaderSystemData<Texture>,
+                ReadExpect<MaterialDefaults>,
+            )| {
+                let albedo = texture_loader.load(
+                    "textures/dirt.png",
+                    PngFormat,
+                    TextureMetadata::srgb()
+                        .with_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Tile)),
+                    (),
+                );
+                let default = material_defaults.0.clone();
+                Material { albedo, ..default }
+            },
+        );
+        //let meshes: Vec<(Point3<f32>, MeshHandle)> = world.exec(
+        //    |(dimension, mesh_loader): (
+        //        ReadExpect<Arc<Mutex<Dimension>>>,
+        //        AssetLoaderSystemData<Mesh>,
+        //    )| {
+        //        dimension
+        //            .lock()
+        //            .iter()
+        //            .filter_map(|mtx_chunk| {
+        //                let chunk = mtx_chunk.lock();
+        //                chunk.generate_mesh()
+        //            })
+        //            .flatten()
+        //            .map(move |(point, mesh_data)| {
+        //                (point, mesh_loader.load_from_data(mesh_data, ()))
+        //            })
+        //            .collect()
+        //    },
+        //);
+        let mut chunk_builder = ChunkBuilder::new(Point3::origin());
+        chunk_builder.par_iter_mut().for_each(|(p, block)| {
+            let x = p.x as i64 - 128;
+            let y = p.y as i64 - 128;
+            let z = p.z as i64 - 128;
+            *block = if x * x + y * y + z * z <= 128 * 128 {
+                Some(1)
+            } else {
+                None
+            }
+            //*block = Some(1);
+        });
+        let chunk = chunk_builder.build();
+        let meshes: Vec<(Point3<f32>, MeshHandle)> = {
+            let mesher = Mesher::new(&chunk.octree);
+            let mut mesh_data = Vec::new();
+            for quad in mesher.generate_quads_array() {
+                println!("{}", quad);
+                let coords = quad.mesh_coords(&chunk.pos);
+                mesh_data.extend(coords);
+            }
+            let mesh = world.exec(|mesh_loader: AssetLoaderSystemData<Mesh>| {
+                mesh_loader.load_from_data(mesh_data.into(), ())
+            });
+            vec![((convert(chunk.pos), mesh))]
+        };
+        //let meshes = chunk.generate_mesh().unwrap();
+        for (point, mesh) in meshes {
+            let mut pos: Transform = Transform::default();
+            pos.set_xyz(point.x, point.y, point.z);
+            world
+                .create_entity()
+                .with(pos)
+                .with(mesh)
+                .with(material.clone())
+                .build();
+        }
+    }
+
+    fn convert_to_chunk_coord(vec: &Vector3<f32>) -> Point3<i32> {
+        let x = (vec.x / 256.0).floor() as i32;
+        let y = (vec.y / 256.0).floor() as i32;
+        let z = (vec.z / 256.0).floor() as i32;
+        Point3::new(x, y, z)
     }
 }
 
-impl SimpleState for Gameplay {
+impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
     fn on_start(&mut self, data: StateData<GameData>) {
-        let StateData { world, .. } = data;
+        let StateData { mut world, .. } = data;
         world.add_resource(AmbientColor(Rgba::from([0.5; 3])));
 
         println!("Creating lights...");
@@ -67,7 +178,7 @@ impl SimpleState for Gameplay {
 
         println!("Put camera");
         let mut transform = Transform::default();
-        transform.set_xyz(128.0, 256.0, 128.0);
+        transform.set_xyz(128.0, 128.0, 128.0);
         transform.rotate_local(Vector3::y_axis(), std::f32::consts::PI);
         world
             .create_entity()
@@ -79,22 +190,20 @@ impl SimpleState for Gameplay {
             .with(PlayerControlTag::default())
             .build();
 
-        let runtime = Runtime::new().expect("Unable to create Tokio Runtime");
-        world.add_resource(runtime);
-
-        // Initialize a sphere of chunks around the origin.
-        let dimension = self.init_dimension(Point3::new(0, 0, 0));
-        {
-            dimension.store(&mut world.write_resource::<Runtime>());
-        }
-        world.add_resource(dimension);
+        let dimension = {
+            let mut runtime = world.write_resource::<Runtime>();
+            self.init_dimension(&mut runtime)
+        };
+        world.add_resource(Arc::new(Mutex::new(dimension)));
+        Gameplay::render_initial_dimension(&mut world);
+        println!("Rendered Initial Dimension");
     }
 
     fn handle_event(
         &mut self,
-        _data: StateData<'_, GameData<'_, '_>>,
+        _data: StateData<'_, GameData<'a, 'b>>,
         event: StateEvent,
-    ) -> SimpleTrans {
+    ) -> Trans<GameData<'a, 'b>, StateEvent> {
         if let StateEvent::Window(event) = &event {
             match event {
                 Event::WindowEvent { event, .. } => match event {
@@ -115,22 +224,82 @@ impl SimpleState for Gameplay {
             Trans::None
         }
     }
+
+    fn update(&mut self, data: StateData<GameData>) -> Trans<GameData<'a, 'b>, StateEvent> {
+        data.data.update(&data.world);
+        Trans::None
+    }
+
+    fn fixed_update(&mut self, data: StateData<GameData>) -> Trans<GameData<'a, 'b>, StateEvent> {
+        //for (_, transform) in (
+        //    &data.world.read_storage::<PlayerControlTag>(),
+        //    &data.world.read_storage::<Transform>(),
+        //)
+        //    .join()
+        //{
+        //    let player_chunk = Gameplay::convert_to_chunk_coord(transform.translation());
+        //    let thread_pool = data.world.read_resource::<ArcThreadPool>().clone();
+        //    let dimension = data.world.write_resource::<Arc<Mutex<Dimension>>>();
+        //    let channel = Arc::new(Mutex::new(
+        //        data.world
+        //            .write_resource::<EventChannel<DimensionChunkEvent>>(),
+        //    ));
+        //    thread_pool.scope(|s| {
+        //        let dimension_ref = &dimension;
+        //        let generate_queue_set_ref = &self.generate_queue_set;
+        //        let channel_ref = &channel;
+        //        let dimension_dir = self.dimension_config.directory.as_path();
+        //        for point in Sphere::new(player_chunk, self.dimension_config.generate_radius as i32)
+        //            .into_iter()
+        //        {
+        //            s.spawn(move |_| {
+        //                let dimension = Arc::clone(dimension_ref);
+        //                let generate_queue_set = Arc::clone(generate_queue_set_ref);
+        //                let channel = Arc::clone(channel_ref);
+        //                let morton = MortonCode::from(&point);
+        //                if !dimension.lock().chunk_exists(morton)
+        //                    && !generate_queue_set.lock().contains(&morton)
+        //                {
+        //                    println!("Generating chunk for {:?}", point);
+        //                    generate_queue_set.lock().insert(morton);
+        //                    if let Ok(chunk) =
+        //                        dimension
+        //                            .lock()
+        //                            ._create_or_load_chunk(dimension_dir, morton, point)
+        //                    {
+        //                        chunk.generate_mesh().map(|chunk_render_info| {
+        //                            channel.lock().iter_write(chunk_render_info.into_iter().map(
+        //                                |(point, mesh_data)| {
+        //                                    DimensionChunkEvent::GeneratedChunk(point, mesh_data)
+        //                                },
+        //                            ))
+        //                        });
+        //                        generate_queue_set.lock().remove(&morton);
+        //                    }
+        //                }
+        //            })
+        //        }
+        //    })
+        //}
+        Trans::None
+    }
 }
 
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 
-    let app_root = application_root_dir();
-    let resources = format!("{}/resources", app_root);
-    let display_config = DisplayConfig::load(format!("{}/display_config.ron", resources));
-    let key_bindings_path = format!("{}/input.ron", resources);
-    let dimension_dir = format!("{}/dimension/", resources);
+    let home = dirs::home_dir().unwrap();
+    let app_root = home.join("google_drive").join("cubes");
+    let resources = app_root.join("resources");
+    let display_config = DisplayConfig::load(resources.join("display_config.ron"));
+    let key_bindings_path = resources.join("input.ron");
+    let dimension_dir = resources.join("dimension");
 
     let pipeline_builder = Pipeline::build().with_stage(
         Stage::with_backbuffer()
             .clear_target([0.0, 0.0, 0.0, 1.0], 1.0)
             .with_pass(DrawSkybox::new())
-            .with_pass(DrawShaded::<PosNormTangTex>::new()),
+            .with_pass(DrawShaded::<PosNormTex>::new()),
     );
 
     let game_data = GameDataBuilder::default()
@@ -140,7 +309,7 @@ fn main() -> amethyst::Result<()> {
                 Some(String::from("move_y")),
                 Some(String::from("move_z")),
             )
-            .with_speed(124.0)
+            .with_speed(16.0)
             .with_sensitivity(0.1, 0.1),
         )?
         .with_bundle(TransformBundle::new().with_dep(&["player_movement"]))?
@@ -149,11 +318,15 @@ fn main() -> amethyst::Result<()> {
         )?
         .with_bundle(RenderBundle::new(pipeline_builder, Some(display_config)))?
         .with_bundle(DimensionBundle::new())?;
-    let mut game = Application::new(
+
+    let mut game = Application::build(
         &resources,
-        Gameplay::new(PathBuf::from(dimension_dir), 4),
-        game_data,
-    )?;
+        Gameplay::new(DimensionConfig::new(PathBuf::from(dimension_dir), 4)),
+    )?
+    .with_resource(Runtime::new().unwrap())
+    .with_resource(EventChannel::<DimensionChunkEvent>::new())
+    .build(game_data)?;
+
     game.run();
     Ok(())
 }

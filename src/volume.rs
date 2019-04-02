@@ -30,9 +30,9 @@ impl<N: Scalar + PrimInt + AsPrimitive<usize>> IntoIterator for Cuboid<N> {
 }
 
 pub struct CuboidIter<N, P> {
-    x: N,
-    y: N,
-    z: N,
+    x: Option<N>,
+    y: Option<N>,
+    z: Option<N>,
     start: P,
     end: P,
     size: usize,
@@ -40,16 +40,15 @@ pub struct CuboidIter<N, P> {
 }
 impl<N: Scalar + PrimInt + AsPrimitive<usize>, P: Borrow<Point3<N>>> CuboidIter<N, P> {
     pub fn new(start: P, end: P) -> Self {
-        let (x, y, z, size) = {
-            let s = start.borrow();
-            let e = end.borrow();
-            let size: usize = ((e.z - s.z) * (e.y - s.y) * (e.x - s.x)).as_();
-            (s.x, s.y, s.x, size)
-        };
+        let s = start.borrow();
+        let e = end.borrow();
+        let (z_diff, y_diff, x_diff): (usize, usize, usize) =
+            ((e.z - s.z).as_(), (e.y - s.y).as_(), (e.x - s.x).as_());
+        let size: usize = z_diff * y_diff * x_diff;
         CuboidIter {
-            x,
-            y,
-            z,
+            x: Some(s.x),
+            y: Some(s.y),
+            z: Some(s.z),
             start,
             end,
             size,
@@ -58,30 +57,45 @@ impl<N: Scalar + PrimInt + AsPrimitive<usize>, P: Borrow<Point3<N>>> CuboidIter<
     }
 }
 
+fn optional_triple<A, B, C>(a: Option<A>, b: Option<B>, c: Option<C>) -> Option<(A, B, C)> {
+    a.and_then(|a_val| b.and_then(|b_val| c.map(|c_val| (a_val, b_val, c_val))))
+}
+
 impl<N: Scalar + PrimInt, P: Borrow<Point3<N>>> Iterator for CuboidIter<N, P> {
     type Item = Point3<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start = self.start.borrow();
-        let end = self.end.borrow();
-        if end.x == self.x && end.y == self.y && end.z == self.z {
-            return None;
-        }
-        self.x = self.x + N::one();
-        if self.x > end.x {
-            self.x = start.x;
-            self.y = self.y + N::one();
-
-            if self.y > end.y {
-                self.y = start.y;
-                self.z = self.z + N::one();
+        optional_triple(self.x, self.y, self.z).and_then(|(x, y, z)| {
+            let end = self.end.borrow();
+            if end.x <= x || end.y <= y || end.z <= z {
+                self.x = None;
+                self.y = None;
+                self.z = None;
+                return None;
             }
-        }
-        return Some(Point3::new(self.x, self.y, self.z));
+            let p = Point3::new(x, y, z);
+            let start = self.start.borrow();
+            self.x = x.checked_add(&N::one());
+            if self.x.map(|x| x >= end.x).unwrap_or(false) {
+                self.x = Some(start.x);
+                self.y = y.checked_add(&N::one());
+
+                if self.y.map(|y| y >= end.y).unwrap_or(false) {
+                    self.y = Some(start.y);
+                    self.z = z.checked_add(&N::one());
+                }
+            }
+            return Some(p);
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.size, Some(self.size))
+    }
+}
+impl<N: Scalar + PrimInt, P: Borrow<Point3<N>>> ExactSizeIterator for CuboidIter<N, P> {
+    fn len(&self) -> usize {
+        self.size
     }
 }
 
@@ -136,11 +150,28 @@ impl<N: Scalar + PrimInt + AsPrimitive<usize>> Sphere<N> {
 
     pub fn iter(&self) -> impl Iterator<Item = Point3<N>> + '_ {
         self.bounding_cube.iter().filter(move |p| {
-            let x = p.x - self.center.x;
-            let y = p.y - self.center.y;
-            let z = p.z - self.center.z;
+            let x = Sphere::difference(p.x, self.center.x);
+            let y = Sphere::difference(p.y, self.center.y);
+            let z = Sphere::difference(p.z, self.center.z);
             x * x + y * y + z * z <= self.radius * self.radius
         })
+    }
+    pub fn into_iter(self) -> impl Iterator<Item = Point3<N>> {
+        let center_x = self.center.x;
+        let center_y = self.center.y;
+        let center_z = self.center.z;
+        let radius = self.radius;
+        self.bounding_cube.into_iter().filter(move |p| {
+            let x = Sphere::difference(p.x, center_x);
+            let y = Sphere::difference(p.y, center_y);
+            let z = Sphere::difference(p.z, center_z);
+            x * x + y * y + z * z <= radius * radius
+        })
+    }
+
+    // Returns a postive difference between two numbers. This matters for unsigned numbers. Since this is used in distance calculation sign doesn't matter.
+    pub fn difference(a: N, b: N) -> N {
+        a.max(b) - a.min(b)
     }
 }
 
@@ -163,4 +194,98 @@ mod test {
         expected.insert(Point3::new(-1, 0, 0));
         assert_eq!(results, expected);
     }
+
+    macro_rules! test_cuboid_range {
+        (($sx: expr, $sy: expr, $sz: expr) => ($ex: expr, $ey: expr, $ez: expr)) => {
+            let cuboid = Cuboid::new(Point3::new($sx, $sy, $sz), Point3::new($ex, $ey, $ez));
+
+            let mut expected = HashSet::new();
+            for x in $sx..$ex {
+                for y in $sy..$ey {
+                    for z in $sz..$ez {
+                        expected.insert(Point3::new(x, y, z));
+                    }
+                }
+            }
+
+            for point in cuboid.into_iter() {
+                assert!(expected.contains(&point), "Missing point: {}", point);
+                expected.remove(&point);
+            }
+
+            assert!(expected.len() == 0, "Expected points: {:?}", expected);
+        };
+        (($sx: expr, $sy: expr, $sz: expr) => ($ex: expr, $ey: expr, $ez: expr), $num:ty) => {
+            let cuboid: Cuboid<$num> =
+                Cuboid::new(Point3::new($sx, $sy, $sz), Point3::new($ex, $ey, $ez));
+
+            let mut expected = HashSet::new();
+            for x in $sx..$ex {
+                for y in $sy..$ey {
+                    for z in $sz..$ez {
+                        expected.insert(Point3::new(x, y, z));
+                    }
+                }
+            }
+
+            for point in cuboid.into_iter() {
+                assert!(expected.contains(&point), "Missing point: {}", point);
+                expected.remove(&point);
+            }
+
+            assert!(expected.len() == 0, "Expected points: {:?}", expected);
+        };
+    }
+
+    #[test]
+    fn cuboid_generates_expected_points() {
+        let cuboid = Cuboid::new(Point3::origin(), Point3::new(1, 1, 1));
+
+        let mut expected = HashSet::new();
+        for x in 0..=1 {
+            for y in 0..=1 {
+                for z in 0..=1 {
+                    expected.insert(Point3::new(x, y, z));
+                }
+            }
+        }
+        for point in cuboid.iter() {
+            assert!(expected.contains(&point), "Missing point: {}", point);
+            expected.remove(&point);
+        }
+
+        assert!(expected.len() == 0, "Expected points: {:?}", expected);
+    }
+
+    #[test]
+    fn cuboid_works_with_arbitrary_points() {
+        let mut cuboid = Cuboid::new(Point3::new(0, 0, 128), Point3::new(64, 64, 192));
+
+        let mut expected = HashSet::new();
+        for x in 0..64 {
+            for y in 0..64 {
+                for z in 128..192 {
+                    expected.insert(Point3::new(x, y, z));
+                }
+            }
+        }
+
+        for point in cuboid.into_iter() {
+            assert!(expected.contains(&point), "Missing point: {}", point);
+            expected.remove(&point);
+        }
+
+        assert!(expected.len() == 0, "Expected points: {:?}", expected);
+    }
+
+    #[test]
+    fn cuboid_works_near_max_integers() {
+        test_cuboid_range!((0, 0, 192) => (64, 64, 256));
+    }
+
+    #[test]
+    fn cuboid_of_size_1() {
+        test_cuboid_range!((127, 126, 251) => (128, 127, 252), u16);
+    }
+
 }

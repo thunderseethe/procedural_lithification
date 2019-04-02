@@ -1,22 +1,17 @@
 use crate::{chunk::Chunk, dimension::morton_code::MortonCode};
 use bincode::{deserialize_from, serialize_into};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Mutex, MutexGuard, RwLock};
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-    IntoParallelRefMutIterator, ParallelIterator,
+    IntoParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use std::{borrow::Borrow, fs::File as SyncFile, mem, path::Path, vec::Vec};
-use tokio::{
-    fs::{File as AsyncFile, OpenOptions},
-    prelude::*,
-    runtime::Runtime,
-};
+use tokio::{fs::OpenOptions, prelude::*, runtime::Runtime};
 
 const CHUNK_DIR: &'static str = "chunk";
 
 pub struct DimensionStorage {
-    len: usize,
+    // The RwLock around indices is used to control access to data and entities.
     indices: RwLock<Vec<MortonCode>>,
     data: Vec<Mutex<Chunk>>,
 }
@@ -24,7 +19,6 @@ pub struct DimensionStorage {
 impl DimensionStorage {
     pub fn with_capacity(capacity: usize) -> Self {
         DimensionStorage {
-            len: capacity,
             indices: RwLock::new(Vec::with_capacity(capacity)),
             data: Vec::with_capacity(capacity),
         }
@@ -40,7 +34,11 @@ impl DimensionStorage {
     }
 
     /// Insert a new chunk at pos, if index is empty None is returned. Otherwise the previous chunk is returned.
-    pub fn insert<M>(&mut self, pos: M, chunk: Chunk) -> Option<Chunk>
+    pub fn insert<'a, M>(
+        &'a mut self,
+        pos: M,
+        chunk: Chunk,
+    ) -> (MutexGuard<'a, Chunk>, Option<Chunk>)
     where
         M: Into<MortonCode>,
     {
@@ -50,13 +48,20 @@ impl DimensionStorage {
             Err(indx) => {
                 indices.insert(indx, morton);
                 self.data.insert(indx, Mutex::new(chunk));
-                return None;
+                return (self.data[indx].lock(), None);
             }
             Ok(indx) => {
                 let old_mutex = mem::replace(&mut self.data[indx], Mutex::new(chunk));
-                return Some(old_mutex.into_inner());
+                return (self.data[indx].lock(), Some(old_mutex.into_inner()));
             }
         }
+    }
+
+    pub fn contains<M>(&self, pos: M) -> bool
+    where
+        M: Into<MortonCode>,
+    {
+        self.indices.read().binary_search(&pos.into()).is_ok()
     }
 
     pub fn chunk_exists<P, M>(&self, dir: P, pos: M) -> bool
@@ -70,7 +75,11 @@ impl DimensionStorage {
             .exists()
     }
 
-    pub fn load<P, M>(&mut self, dir: P, pos: M) -> Result<(), bincode::Error>
+    pub fn load<'a, P, M>(
+        &'a mut self,
+        dir: P,
+        pos: M,
+    ) -> Result<MutexGuard<'a, Chunk>, bincode::Error>
     where
         P: AsRef<Path>,
         M: Into<MortonCode>,
@@ -83,7 +92,7 @@ impl DimensionStorage {
                 let decoder = DeflateDecoder::new(file);
                 deserialize_from(decoder)
             })
-            .map(|chunk| {
+            .map(move |chunk| {
                 // We're overwriting whatever was previously present at this index.
                 let indx = match self.indices.read().binary_search(&morton) {
                     Ok(indx) => indx,
@@ -92,6 +101,7 @@ impl DimensionStorage {
                 let mut index_lock = self.indices.write();
                 self.data.insert(indx, Mutex::new(chunk));
                 index_lock.insert(indx, morton);
+                self.data[indx].lock()
             })
     }
 

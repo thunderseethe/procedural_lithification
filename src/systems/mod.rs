@@ -1,2 +1,2 @@
-pub mod dimension_generation;
+pub mod dimension;
 pub mod player;

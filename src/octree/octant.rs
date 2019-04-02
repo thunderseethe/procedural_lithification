@@ -6,14 +6,14 @@ use num_traits::FromPrimitive;
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
 pub enum Octant {
     // x, y, z
-    HighHighHigh = 0,
-    HighHighLow = 1,
-    HighLowHigh = 2,
-    HighLowLow = 3,
-    LowHighHigh = 4,
-    LowHighLow = 5,
-    LowLowHigh = 6,
-    LowLowLow = 7,
+    HighHighHigh = 7,
+    HighHighLow = 6,
+    HighLowHigh = 5,
+    HighLowLow = 4,
+    LowHighHigh = 3,
+    LowHighLow = 2,
+    LowLowHigh = 1,
+    LowLowLow = 0,
 }
 use self::Octant::*;
 

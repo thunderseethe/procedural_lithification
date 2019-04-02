@@ -17,7 +17,10 @@ debug = true
 [dependencies]
 amethyst = "0.10.0"
 array-init = "0.0.4"
+alga = "0.8.2"
 bincode = "1.1.1"
+dirs = "1.0.5"
+either = "1.5"
 flate2 = "1.0"
 itertools = "0.8.0"
 noise = "0.5.1"
@@ -33,5 +36,9 @@ tokio = "0.1.15"
 toolshed = "0.8.0"
 
 [[bench]]
-name = "chunk_generation"
+name = "chunk"
+harness = false
+
+[[bench]]
+name = "chunk_meshing"
 harness = false

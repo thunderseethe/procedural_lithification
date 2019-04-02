@@ -1,4 +1,3 @@
-use crate::octree::octree_data::OctreeData::Leaf;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -10,7 +9,7 @@ use std::{
 };
 
 use crate::chunk::{block::DIRT_BLOCK, chunk_builder::ChunkBuilder, Chunk};
-use crate::octree::Number;
+use crate::octree::{octree_data::OctreeData::Leaf, Number};
 
 pub struct Terrain {
     perlin: Perlin,
@@ -90,12 +89,9 @@ impl Terrain {
         }
     }
 
-    fn y_zero_chunk_generator<P>(&self, chunk_pos_ref: P) -> Chunk
-    where
-        P: Borrow<Point3<i32>>,
-    {
-        let chunk_pos = chunk_pos_ref.borrow();
-        let height_map: [[u8; 256]; 256] = array_init::array_init(|x| {
+    #[inline]
+    fn create_height_map(&self, chunk_pos: &Point3<i32>) -> [[u8; 256]; 256] {
+        array_init::array_init(|x| {
             array_init::array_init(|z| {
                 let nx = (chunk_pos.x as f64) + (x as f64 / 256.0) - 0.5;
                 let nz = (chunk_pos.z as f64) + (z as f64 / 256.0) - 0.5;
@@ -108,21 +104,37 @@ impl Terrain {
                 let noise = noise / (1.0 + 0.5 + 0.25 + 0.13 + 0.06 + 0.03);
                 ((noise / 2.0 + 0.5) * 256.0).ceil() as u8
             })
-        });
-        let generate_block = |p: Point3<Number>| {
+        })
+    }
+
+    #[inline]
+    pub fn y_zero_chunk_generator<P>(&self, chunk_pos_ref: P) -> Chunk
+    where
+        P: Borrow<Point3<i32>>,
+    {
+        let chunk_pos = chunk_pos_ref.borrow();
+        let height_map = self.create_height_map(chunk_pos);
+        let generate_block = |p: &Point3<Number>| {
             let subarray: [u8; 256] = height_map[p.x as usize];
             let height: u8 = subarray[p.z as usize];
-            if p.y <= height {
+            //if p.y <= height {
+            //    Some(DIRT_BLOCK)
+            //} else {
+            //    None
+            //}
+            let x = p.x as i32 - 128;
+            let y = p.y as i32 - 128;
+            let z = p.z as i32 - 128;
+            if x * x + y * y + z * z <= 128 * 128 {
                 Some(DIRT_BLOCK)
             } else {
                 None
             }
         };
         let mut chunk_to_be = ChunkBuilder::new(*chunk_pos);
-        chunk_to_be.par_iter_mut().for_each(|leaf| {
-            let pos = leaf.root_point();
-            generate_block(pos).map(|block| leaf.set_data(Leaf(Arc::new(block))));
-        });
+        chunk_to_be
+            .par_iter_mut()
+            .for_each(|(pos, block)| *block = generate_block(&pos));
         chunk_to_be.build()
     }
 }

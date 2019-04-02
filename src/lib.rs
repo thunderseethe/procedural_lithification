@@ -1,4 +1,4 @@
-#![recursion_limit="128"]
+#![feature(option_xor)]
 extern crate itertools;
 #[macro_use]
 extern crate num_derive;
@@ -7,6 +7,7 @@ extern crate serde_derive;
 
 extern crate amethyst;
 extern crate bincode;
+extern crate either;
 extern crate flate2;
 extern crate noise;
 extern crate num_traits;
@@ -24,4 +25,4 @@ pub mod systems;
 pub mod terrain;
 pub mod volume;
 
-mod mut_ptr;
+pub(crate) mod mut_ptr;

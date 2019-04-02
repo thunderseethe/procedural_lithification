@@ -1,11 +1,12 @@
+/// This is all very unsafe and should be used really carefully.
 pub struct MultiThreadMutPtr<T>(pub *mut T);
 impl<T> MultiThreadMutPtr<T> {
     pub fn new(ptr: *mut T) -> Self {
         MultiThreadMutPtr(ptr)
     }
 
-    pub unsafe fn offset(self, count: isize) -> MultiThreadMutPtr<T> {
-        MultiThreadMutPtr::new(self.0.offset(count))
+    pub unsafe fn element_at(&self, index: usize) -> &mut T {
+        self.0.add(index).as_mut().unwrap()
     }
 }
 unsafe impl<T> Send for MultiThreadMutPtr<T> {}

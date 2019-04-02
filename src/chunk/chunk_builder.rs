@@ -1,234 +1,42 @@
 use crate::chunk::{block::Block, parallel_drive_mut_node_children, Chunk};
-use crate::mut_ptr::MultiThreadMutPtr;
+use crate::dimension::morton_code::MortonCode;
 use crate::octree::{
     octant_dimensions::OctantDimensions,
     octree_data::OctreeData,
     {Number, Octree},
 };
 use amethyst::core::nalgebra::Point3;
+use either::Either;
 use rayon::iter::{plumbing::*, *};
 use std::sync::Arc;
-use toolshed::Arena;
 
-pub struct ChunkBuilder {
-    pos: Point3<i32>,
-    tree: Octree<Block>,
-}
-
-impl ChunkBuilder {
-    pub fn new(pos: Point3<i32>) -> Self {
-        ChunkBuilder {
-            pos,
-            tree: gen_subtree(Point3::new(0, 0, 0), 8),
-        }
-    }
-
-    fn with_tree(pos: Point3<i32>, tree: Octree<Block>) -> Self {
-        ChunkBuilder { pos, tree }
-    }
-
-    pub fn build(mut self) -> Chunk {
-        self.tree.compress();
-        Chunk::new(self.pos, self.tree)
-    }
-}
-
-impl ParallelIterator for ChunkBuilder {
-    type Item = Octree<Block>;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        use crate::octree::{octree_data::OctreeData::Node, parallel_drive_node_children};
-        match self.tree.data() {
-            Node(nodes) => parallel_drive_node_children(nodes, consumer, |node, cnsmr| {
-                ChunkBuilder::with_tree(self.pos, node.clone())
-                    .into_par_iter()
-                    .drive_unindexed(cnsmr)
-            }),
-            _ => consumer.into_folder().consume(self.tree).complete(),
+struct RawTree(Box<[Option<Block>; 16777216]>);
+impl RawTree {
+    pub fn new() -> Self {
+        let mut v: Vec<Option<Block>> = vec![None; 16777216];
+        unsafe {
+            let ptr = v.as_mut_ptr();
+            std::mem::forget(v);
+            RawTree(Box::from_raw(ptr as *mut [Option<Block>; 16777216]))
         }
     }
 }
-
-impl<'data> IntoParallelIterator for &'data mut ChunkBuilder {
-    type Iter = IterMut<'data>;
-    type Item = <IterMut<'data> as ParallelIterator>::Item;
+impl<'data> IntoParallelIterator for &'data mut RawTree {
+    type Item = &'data mut Option<Block>;
+    type Iter = LeavesIterMut<'data>;
 
     fn into_par_iter(self) -> Self::Iter {
-        IterMut {
-            tree: &mut self.tree,
+        LeavesIterMut {
+            slice: &mut self.0[..],
         }
     }
 }
 
-pub struct IterMut<'data> {
-    tree: &'data mut Octree<Block>,
-}
-impl<'data> ParallelIterator for IterMut<'data> {
-    type Item = &'data mut Octree<Block>;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        if self.tree.is_node() {
-            if self.tree.height() == 1 {
-                consumer
-                    .into_folder()
-                    .consume_iter(
-                        self.tree
-                            .mut_children()
-                            .into_iter()
-                            .map(|arc| Arc::get_mut(arc).unwrap()),
-                    )
-                    .complete()
-            } else {
-                parallel_drive_mut_node_children(
-                    self.tree.mut_children(),
-                    consumer,
-                    |node, cnsmr| {
-                        (IterMut {
-                            tree: Arc::make_mut(node),
-                        })
-                        .into_par_iter()
-                        .drive_unindexed(cnsmr)
-                    },
-                )
-            }
-        } else {
-            consumer.into_folder().consume(self.tree).complete()
-        }
-    }
-}
-
-fn gen_subtree(pos: Point3<Number>, height: u32) -> Octree<Block> {
-    // Base case
-    if height == 0 {
-        Octree::new(pos, None, height)
-    } else {
-        let child_height = height - 1;
-        let dimension = Number::pow(2, child_height);
-        let (((hhh, hhl), (hlh, hll)), ((lhh, lhl), (llh, lll))) = rayon::join(
-            || {
-                rayon::join(
-                    || {
-                        rayon::join(
-                            /* 0 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(
-                                        pos.x + dimension,
-                                        pos.y + dimension,
-                                        pos.z + dimension,
-                                    ),
-                                    child_height,
-                                )
-                            },
-                            /* 1 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y + dimension, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                    || {
-                        rayon::join(
-                            /* 2 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 3 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x + dimension, pos.y, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                )
-            },
-            || {
-                rayon::join(
-                    || {
-                        rayon::join(
-                            /* 4 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y + dimension, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 5 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y + dimension, pos.z),
-                                    child_height,
-                                )
-                            },
-                        )
-                    },
-                    || {
-                        rayon::join(
-                            /* 6 */
-                            || {
-                                gen_subtree(
-                                    Point3::new(pos.x, pos.y, pos.z + dimension),
-                                    child_height,
-                                )
-                            },
-                            /* 7 */
-                            || gen_subtree(Point3::new(pos.x, pos.y, pos.z), child_height),
-                        )
-                    },
-                )
-            },
-        );
-        Octree::with_fields(
-            OctreeData::Node([
-                Arc::new(hhh),
-                Arc::new(hhl),
-                Arc::new(hlh),
-                Arc::new(hll),
-                Arc::new(lhh),
-                Arc::new(lhl),
-                Arc::new(llh),
-                Arc::new(lll),
-            ]),
-            OctantDimensions::new(pos, u16::pow(2, height)),
-            height,
-        )
-    }
-}
-
-#[derive(Copy, Clone)]
-struct RawLeaf([Option<Block>; 8]);
-impl Default for RawLeaf {
-    fn default() -> Self {
-        RawLeaf([None; 8])
-    }
-}
-impl<'a> IntoParallelIterator for &'a mut RawLeaf {
-    type Item = &'a mut Option<Block>;
-    type Iter = RawLeafIterMut<'a>;
-
-    fn into_par_iter(self) -> Self::Iter {
-        RawLeafIterMut { slice: &mut self.0 }
-    }
-}
-
-struct RawLeafIterMut<'data> {
+struct LeavesIterMut<'data> {
     slice: &'data mut [Option<Block>],
 }
-impl<'a> ParallelIterator for RawLeafIterMut<'a> {
-    type Item = &'a mut Option<Block>;
+impl<'data> ParallelIterator for LeavesIterMut<'data> {
+    type Item = &'data mut Option<Block>;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
     where
@@ -237,9 +45,9 @@ impl<'a> ParallelIterator for RawLeafIterMut<'a> {
         bridge(self, consumer)
     }
 }
-impl<'a> IndexedParallelIterator for RawLeafIterMut<'a> {
+impl<'data> IndexedParallelIterator for LeavesIterMut<'data> {
     fn len(&self) -> usize {
-        8
+        16777216
     }
 
     fn drive<C>(self, consumer: C) -> C::Result
@@ -253,16 +61,16 @@ impl<'a> IndexedParallelIterator for RawLeafIterMut<'a> {
     where
         CB: ProducerCallback<Self::Item>,
     {
-        callback.callback(RawLeafProducer { slice: self.slice })
+        callback.callback(SliceProducer { slice: self.slice })
     }
 }
 
-struct RawLeafProducer<'data, T> {
-    slice: &'data mut [T],
+struct SliceProducer<'a, T> {
+    slice: &'a mut [T],
 }
-impl<'data, T: Send + Sync> Producer for RawLeafProducer<'data, T> {
-    type Item = &'data mut T;
-    type IntoIter = std::slice::IterMut<'data, T>;
+impl<'a, T: Send> Producer for SliceProducer<'a, T> {
+    type Item = &'a mut T;
+    type IntoIter = std::slice::IterMut<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.slice.iter_mut()
@@ -271,111 +79,196 @@ impl<'data, T: Send + Sync> Producer for RawLeafProducer<'data, T> {
     fn split_at(self, index: usize) -> (Self, Self) {
         let (left, right) = self.slice.split_at_mut(index);
         (
-            RawLeafProducer { slice: left },
-            RawLeafProducer { slice: right },
+            SliceProducer { slice: left },
+            SliceProducer { slice: right },
         )
     }
 }
 
-#[derive(Copy, Clone)]
-struct RawNode<T>([T; 8]);
-impl<T: Default + Copy> Default for RawNode<T> {
-    fn default() -> Self {
-        RawNode([T::default(); 8])
+trait BuildOctree {
+    fn build_octree(
+        data: &[Option<Block>; 16777216],
+        start: usize,
+        end: usize,
+    ) -> Either<Option<Block>, Octree<Block>>;
+
+    fn height() -> u32;
+    fn segment_size() -> usize;
+}
+struct RawNode<T> {
+    _marker: std::marker::PhantomData<T>,
+}
+struct RawLeaf;
+
+impl BuildOctree for RawLeaf {
+    fn build_octree(
+        data: &[Option<Block>; 16777216],
+        start: usize,
+        end: usize,
+    ) -> Either<Option<Block>, Octree<Block>> {
+        // Our leaf only covers one index.
+        assert_eq!(
+            end - start,
+            1,
+            "Height {} covers {} to {}",
+            Self::height(),
+            start,
+            end
+        );
+        Either::Left(data[start])
+    }
+
+    fn height() -> u32 {
+        0
+    }
+
+    fn segment_size() -> usize {
+        1
     }
 }
-impl<'a, T: Send + Sync> IntoParallelIterator for &'a mut RawNode<T>
-where
-    &'a mut T: IntoParallelIterator,
-{
-    type Item = <&'a mut T as IntoParallelIterator>::Item;
-    type Iter = RawNodeIterMut<'a, T>;
 
-    fn into_par_iter(self) -> Self::Iter {
-        RawNodeIterMut {
-            slice: &mut self.0[..],
+macro_rules! create_octree {
+    ($t: ident, $either:ident, $raw:expr) => {{
+        let point = MortonCode::from_raw(($raw) as u64).as_point().unwrap();
+        Arc::new(
+            $either
+                .map_left(|option_block| Octree::new(point, option_block, $t::height()))
+                .into_inner(),
+        )
+    }};
+}
+
+impl<T: BuildOctree> BuildOctree for RawNode<T> {
+    fn build_octree(
+        data: &[Option<Block>; 16777216],
+        start: usize,
+        end: usize,
+    ) -> Either<Option<Block>, Octree<Block>> {
+        let segment = T::segment_size();
+        let (a, b, c, d, e, f, g, h) = (
+            T::build_octree(data, start, start + segment),
+            T::build_octree(data, start + segment, start + (segment * 2)),
+            T::build_octree(data, start + (segment * 2), start + (segment * 3)),
+            T::build_octree(data, start + (segment * 3), start + (segment * 4)),
+            T::build_octree(data, start + (segment * 4), start + (segment * 5)),
+            T::build_octree(data, start + (segment * 5), start + (segment * 6)),
+            T::build_octree(data, start + (segment * 6), start + (segment * 7)),
+            T::build_octree(data, start + (segment * 7), end),
+        );
+        if a == b && a == c && a == d && a == e && a == f && a == g && a == h {
+            a.map_right(|octree| octree.set_height(Self::height()))
+        } else {
+            let childs = [
+                create_octree!(T, a, start),
+                create_octree!(T, b, start + segment),
+                create_octree!(T, c, start + (2 * segment)),
+                create_octree!(T, d, start + (3 * segment)),
+                create_octree!(T, e, start + (4 * segment)),
+                create_octree!(T, f, start + (5 * segment)),
+                create_octree!(T, g, start + (6 * segment)),
+                create_octree!(T, h, start + (7 * segment)),
+            ];
+            let point = MortonCode::from_raw(start as u64).as_point().unwrap();
+            let octree = Octree::with_children(childs, point, Self::height());
+            Either::Right(octree)
         }
     }
-}
 
-struct RawNodeIterMut<'data, T> {
-    slice: &'data mut [T],
-}
+    fn height() -> u32 {
+        T::height() + 1
+    }
 
-macro_rules! split_consumer {
-    ($nodes: ident, $consumer: ident, @split 1) => {{
-        let (left, right, reducer) = $consumer.split_at(1);
-        let left_res = unsafe { $nodes.0.as_mut().unwrap().into_par_iter().drive_unindexed(left) };
-        let right_res = unsafe { $nodes.offset(1).0.as_mut().unwrap().into_par_iter().drive_unindexed(right) };
-        reducer.reduce(left_res, right_res)
-    }};
-    ($nodes: ident, $consumer: ident, @split 2) => {{
-        let (left, right, reducer) = $consumer.split_at(2);
-        let (left_res, right_res) = rayon::join(
-            || {
-                split_consumer!($nodes, left, @split 1)
-            },
-            || {
-                let nodes = unsafe { $nodes.offset(2) };
-                split_consumer!(nodes, right, @split 1)
-            }
-        );
-        reducer.reduce(left_res, right_res)
-    }};
-    ($nodes: ident, $consumer: ident, @split 4) => {{
-        let (left, right, reducer) = $consumer.split_at(4);
-        let (left_res, right_res) = rayon::join(
-            || {
-                split_consumer!($nodes, left, @split 2)
-            },
-            || {
-                let nodes = unsafe { $nodes.offset(4) };
-                split_consumer!(nodes, right, @split 2)
-            }
-        );
-        reducer.reduce(left_res, right_res)
-    }};
-    ($nodes:ident, $consumer: ident) => {{
-        split_consumer!($nodes, $consumer, @split 4)
-    }};
-}
-
-impl<'a, T: Send + Sync> ParallelIterator for RawNodeIterMut<'a, T>
-where
-    &'a mut T: IntoParallelIterator,
-{
-    type Item = <&'a mut T as IntoParallelIterator>::Item;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        let nodes = MultiThreadMutPtr::new(self.slice.as_mut_ptr());
-        split_consumer!(nodes, consumer)
+    fn segment_size() -> usize {
+        T::segment_size() * 8
     }
 }
 
-struct RawTree(RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawLeaf>>>>>>>);
-impl RawTree {
-    pub fn new() -> Self {
-        RawTree(RawNode::default())
-    }
-}
-
-pub struct ChunkBuilder2 {
+pub struct ChunkBuilder {
     pos: Point3<i32>,
     tree: RawTree,
 }
 
-impl ChunkBuilder2 {
+type OctreeBuilder =
+    RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawLeaf>>>>>>>>;
+impl ChunkBuilder {
     pub fn new(pos: Point3<i32>) -> Self {
-        ChunkBuilder2 {
+        ChunkBuilder {
             pos,
             tree: RawTree::new(),
         }
     }
 
-    pub fn par_iter_mut<'a>(&'a mut self) -> impl ParallelIterator<Item = &'a mut Option<Block>> {
-        self.tree.0.into_par_iter()
+    pub fn par_iter_mut<'a>(
+        &'a mut self,
+    ) -> impl ParallelIterator<Item = (Point3<Number>, &'a mut Option<Block>)> {
+        (&mut self.tree)
+            .into_par_iter()
+            .enumerate()
+            .map(|(indx, block)| (MortonCode::from_raw(indx as u64).as_point().unwrap(), block))
+    }
+
+    pub fn build(self) -> Chunk {
+        let octree = OctreeBuilder::build_octree(&self.tree.0, 0, 16777216)
+            .map_left(|option_block| Octree::new(Point3::new(0, 0, 0), option_block, 8))
+            .into_inner();
+        Chunk {
+            pos: self.pos,
+            octree,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::volume::{Cube, Sphere};
+
+    #[test]
+    fn test_new_does_not_stack_overflow() {
+        let chunk_to_be = ChunkBuilder::new(Point3::new(0, 0, 0));
+        println!("{:?}", chunk_to_be.tree.0[100]);
+    }
+
+    #[test]
+    fn test_plateau_built_correctly() {
+        let mut chunk_to_be = ChunkBuilder::new(Point3::new(0, 0, 0));
+        chunk_to_be
+            .par_iter_mut()
+            .for_each(|(point, block)| *block = if point.y < 128 { Some(1) } else { None });
+        let chunk = chunk_to_be.build();
+        Cube::<u16>::new(Point3::new(128, 128, 128), 128)
+            .iter()
+            .for_each(|point| {
+                let pos = Point3::new(point.x as u8, point.y as u8, point.z as u8);
+                assert_eq!(
+                    chunk.get_block(pos),
+                    if pos.y < 128 { Some(1) } else { None },
+                    "{:?}",
+                    pos
+                );
+            })
+    }
+
+    #[test]
+    fn test_sphere_built_correctly() {
+        let r_2: u16 = 128 * 128;
+        let mut chunk_to_be = ChunkBuilder::new(Point3::new(0, 0, 0));
+        chunk_to_be.par_iter_mut().for_each(|(point, block)| {
+            let x = Sphere::difference(point.x as u16, 128);
+            let y = Sphere::difference(point.y as u16, 128);
+            let z = Sphere::difference(point.z as u16, 128);
+            *block = if x * x + y * y + z * z <= r_2 {
+                Some(1)
+            } else {
+                None
+            }
+        });
+        let chunk = chunk_to_be.build();
+        Sphere::<u16>::new(Point3::new(128, 128, 128), 128)
+            .iter()
+            .for_each(|point| {
+                let pos = Point3::new(point.x as u8, point.y as u8, point.z as u8);
+                assert_eq!(chunk.get_block(pos), Some(1), "{:?}", pos);
+            });
     }
 }
