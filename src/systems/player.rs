@@ -1,3 +1,4 @@
+use crate::collision::RayComponent;
 use amethyst::{
     controls::{CursorHideSystem, HideCursor, MouseFocusUpdateSystem, WindowFocus},
     core::{
@@ -7,10 +8,13 @@ use amethyst::{
         specs::{Component, DispatcherBuilder, Join, NullStorage, Resources},
         Time, Transform,
     },
-    ecs::{Read, ReadStorage, System, WriteStorage},
+    ecs::{Entity, Read, ReadStorage, System, WriteStorage},
     input::{get_input_axis_simple, InputHandler},
+    ui::{UiFinder, UiText},
     winit::{DeviceEvent, Event},
 };
+use ncollide3d::math::{Point, Vector};
+use ncollide3d::query::Ray;
 use serde::{Deserialize, Serialize};
 use std::{hash::Hash, marker::PhantomData};
 
@@ -60,17 +64,22 @@ where
     type SystemData = (
         Read<'a, Time>,
         WriteStorage<'a, Transform>,
+        WriteStorage<'a, RayComponent<f32>>,
         Read<'a, InputHandler<A, B>>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (time, mut transform, input, tag): Self::SystemData) {
+    fn run(&mut self, (time, mut transform, mut ray, input, tag): Self::SystemData) {
         let x = get_input_axis_simple(&self.right_input_axis, &input);
         let y = get_input_axis_simple(&self.up_input_axis, &input);
         let z = get_input_axis_simple(&self.forward_input_axis, &input);
 
         if let Some(direction) = Unit::try_new(Vector3::new(x, y, z), 1.0e-6) {
-            for (transform, _) in (&mut transform, &tag).join() {
+            for (transform, ray, _) in (&mut transform, &mut ray, &tag).join() {
+                let translation = transform.translation();
+                let origin = Point::new(translation.x, translation.y, translation.z);
+                let dir = ncollide3d::math::Vector::new(direction.x, direction.y, direction.z);
+                *ray = RayComponent::new(Ray::new(origin, dir));
                 transform.move_along_local(direction, time.delta_seconds() * self.speed);
             }
         }
@@ -133,6 +142,44 @@ where
 
         Self::SystemData::setup(res);
         self.event_reader = Some(res.fetch_mut::<EventChannel<Event>>().register_reader());
+    }
+}
+
+struct DrawPlayerPositionSystem {
+    position_text: Option<Entity>,
+}
+impl DrawPlayerPositionSystem {
+    fn new() -> Self {
+        DrawPlayerPositionSystem {
+            position_text: None,
+        }
+    }
+}
+
+impl<'a> System<'a> for DrawPlayerPositionSystem {
+    type SystemData = (
+        ReadStorage<'a, PlayerControlTag>,
+        ReadStorage<'a, Transform>,
+        WriteStorage<'a, UiText>,
+        UiFinder<'a>,
+        Read<'a, Time>,
+    );
+
+    fn run(&mut self, (player_tag, transforms, mut ui_text, ui_finder, time): Self::SystemData) {
+        if self.position_text.is_none() {
+            if let Some(entity) = ui_finder.find("position_text") {
+                self.position_text = Some(entity);
+            }
+        }
+        for (transform, _) in (&transforms, &player_tag).join() {
+            if let Some(position_display) = self.position_text.and_then(|e| ui_text.get_mut(e)) {
+                if time.frame_number() % 20 == 0 {
+                    let t = transform.translation();
+                    let string = format!("{:.0}, {:.0}, {:.0}", t.x, t.y, t.z);
+                    position_display.text = string;
+                }
+            }
+        }
     }
 }
 
@@ -202,6 +249,7 @@ where
             &["player_rotation"],
         );
         builder.add(CursorHideSystem::new(), "cursor_hide", &["mouse_focus"]);
+        builder.add(DrawPlayerPositionSystem::new(), "draw_player_position", &[]);
         Ok(())
     }
 }

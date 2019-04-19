@@ -3,7 +3,6 @@ use super::{
     octant_face::OctantFace,
     Number,
 };
-use crate::terrain::OrdPoint3;
 use amethyst::core::nalgebra::geometry::Point3;
 use num_traits::ToPrimitive;
 use std::{borrow::Borrow, cmp::Ordering, fmt};
@@ -17,7 +16,7 @@ pub struct OctantDimensions {
 impl fmt::Debug for OctantDimensions {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("OctantDimensions")
-            .field("bottom_left", &OrdPoint3::new(self.bottom_left))
+            .field("bottom_left", &self.bottom_left)
             .field("diameter", &self.diameter)
             .finish()
     }

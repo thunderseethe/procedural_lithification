@@ -12,7 +12,7 @@ fn chunk_generation(c: &mut Criterion) {
         "chunk_generation",
         ParameterizedBenchmark::new(
             "New",
-            |b, i| b.iter(|| Terrain::new().generate_chunk(i)),
+            |b, i| b.iter(|| Terrain::default().generate_chunk(i)),
             vec![Point3::new(0, 0, 0)],
         ),
     );

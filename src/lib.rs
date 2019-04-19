@@ -1,14 +1,16 @@
-#![feature(option_xor)]
 extern crate itertools;
 #[macro_use]
 extern crate num_derive;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate galvanic_assert;
 
 extern crate amethyst;
 extern crate bincode;
 extern crate either;
 extern crate flate2;
+extern crate ncollide3d;
 extern crate noise;
 extern crate num_traits;
 extern crate parking_lot;
@@ -19,6 +21,7 @@ extern crate tokio;
 extern crate toolshed;
 
 pub mod chunk;
+mod collision;
 pub mod dimension;
 pub mod octree;
 pub mod systems;

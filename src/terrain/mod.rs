@@ -1,77 +1,80 @@
-use amethyst::core::nalgebra::{Point3, Scalar};
-use noise::{NoiseFn, Perlin};
+use amethyst::core::nalgebra::Point3;
+use noise::{NoiseFn, Perlin, Seedable};
 use rayon::prelude::*;
-use std::{
-    borrow::Borrow,
-    cmp::{Ord, Ordering},
-    fmt,
-    sync::Arc,
+use std::borrow::Borrow;
+
+use crate::chunk::{
+    block::{Block, DIRT_BLOCK},
+    chunk_builder::ChunkBuilder,
+    Chunk,
 };
+use crate::octree::Number;
 
-use crate::chunk::{block::DIRT_BLOCK, chunk_builder::ChunkBuilder, Chunk};
-use crate::octree::{octree_data::OctreeData::Leaf, Number};
+pub type HeightMap = [[u8; 256]; 256];
 
-pub struct Terrain {
-    perlin: Perlin,
+pub trait GenerateBlockFn {
+    fn generate(&self, height_map: &HeightMap, point: &Point3<Number>) -> Option<Block>;
 }
-
-// Wrapper to provide ordering for points so they can be sorted.
-// This ordering is abritrary and doesn't matter so it is kept iternal to terrain generation.
-#[derive(PartialEq, Eq, Clone)]
-pub struct OrdPoint3<N: Scalar> {
-    p: Point3<N>,
-}
-impl<N: Scalar> OrdPoint3<N> {
-    pub fn new(p: Point3<N>) -> Self {
-        OrdPoint3 { p }
+impl<F> GenerateBlockFn for F
+where
+    F: Fn(&HeightMap, &Point3<Number>) -> Option<Block>,
+{
+    fn generate(&self, height_map: &HeightMap, pos: &Point3<Number>) -> Option<Block> {
+        self(height_map, pos)
     }
 }
-impl<N: Ord + PartialEq + Scalar> PartialOrd for OrdPoint3<N> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl<N: Ord + Eq + Scalar> Ord for OrdPoint3<N> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use std::cmp::Ordering::*;
-        let cmps = (
-            self.p.x.cmp(&other.p.x),
-            self.p.y.cmp(&other.p.y),
-            self.p.z.cmp(&other.p.z),
-        );
-        match cmps {
-            (Greater, _, _) => Greater,
-            (Equal, Greater, _) => Greater,
-            (Equal, Equal, Greater) => Greater,
-            (Equal, Equal, Equal) => Equal,
-            (_, _, _) => Less,
+pub struct DefaultGenerateBlock();
+impl GenerateBlockFn for DefaultGenerateBlock {
+    fn generate(&self, height_map: &HeightMap, p: &Point3<Number>) -> Option<Block> {
+        let subarray: [u8; 256] = height_map[p.x as usize];
+        let height: u8 = subarray[p.z as usize];
+        if p.y <= height {
+            Some(DIRT_BLOCK)
+        } else {
+            None
         }
     }
 }
-impl<N: Scalar> fmt::Debug for OrdPoint3<N> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Point3")
-            .field("x", &self.p.x)
-            .field("y", &self.p.y)
-            .field("z", &self.p.z)
-            .finish()
-    }
+
+pub struct Terrain<F> {
+    perlin: Perlin,
+    generate_block: F,
 }
-impl<N: Scalar> Into<Point3<N>> for OrdPoint3<N> {
-    fn into(self) -> Point3<N> {
-        self.p
-    }
-}
-impl<N: Scalar> From<Point3<N>> for OrdPoint3<N> {
-    fn from(p: Point3<N>) -> Self {
-        OrdPoint3::new(p)
+
+impl Default for Terrain<DefaultGenerateBlock> {
+    fn default() -> Self {
+        Terrain {
+            perlin: Perlin::new(),
+            generate_block: DefaultGenerateBlock(),
+        }
     }
 }
 
-impl Terrain {
-    pub fn new() -> Self {
+impl<F> Terrain<F>
+where
+    F: GenerateBlockFn + Sync,
+{
+    pub fn new(seed: u32, generate_block: F) -> Self {
         Terrain {
-            perlin: Perlin::new(),
+            perlin: Perlin::new().set_seed(seed),
+            generate_block,
+        }
+    }
+
+    pub fn with_seed(self, seed: u32) -> Self {
+        Terrain {
+            perlin: Perlin::new().set_seed(seed),
+            ..self
+        }
+    }
+
+    pub fn with_block_generator<NewF>(self, generate_block: NewF) -> Terrain<NewF>
+    where
+        NewF: GenerateBlockFn + Sync,
+    {
+        Terrain {
+            generate_block,
+            perlin: self.perlin,
         }
     }
 
@@ -90,11 +93,11 @@ impl Terrain {
     }
 
     #[inline]
-    fn create_height_map(&self, chunk_pos: &Point3<i32>) -> [[u8; 256]; 256] {
+    fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
         array_init::array_init(|x| {
             array_init::array_init(|z| {
-                let nx = (chunk_pos.x as f64) + (x as f64 / 256.0) - 0.5;
-                let nz = (chunk_pos.z as f64) + (z as f64 / 256.0) - 0.5;
+                let nx = (chunk_pos.x as f64) + ((x as f64 / 256.0) - 0.5);
+                let nz = (chunk_pos.z as f64) + ((z as f64 / 256.0) - 0.5);
                 let noise = self.perlin.get([nx, nz])
                     + 0.5 * self.perlin.get([2.0 * nx, 2.0 * nz])
                     + 0.25 * self.perlin.get([4.0 * nx, 4.0 * nz])
@@ -114,27 +117,10 @@ impl Terrain {
     {
         let chunk_pos = chunk_pos_ref.borrow();
         let height_map = self.create_height_map(chunk_pos);
-        let generate_block = |p: &Point3<Number>| {
-            let subarray: [u8; 256] = height_map[p.x as usize];
-            let height: u8 = subarray[p.z as usize];
-            //if p.y <= height {
-            //    Some(DIRT_BLOCK)
-            //} else {
-            //    None
-            //}
-            let x = p.x as i32 - 128;
-            let y = p.y as i32 - 128;
-            let z = p.z as i32 - 128;
-            if x * x + y * y + z * z <= 128 * 128 {
-                Some(DIRT_BLOCK)
-            } else {
-                None
-            }
-        };
         let mut chunk_to_be = ChunkBuilder::new(*chunk_pos);
         chunk_to_be
             .par_iter_mut()
-            .for_each(|(pos, block)| *block = generate_block(&pos));
+            .for_each(|(pos, block)| *block = self.generate_block.generate(&height_map, &pos));
         chunk_to_be.build()
     }
 }

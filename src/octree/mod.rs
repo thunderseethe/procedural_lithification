@@ -965,4 +965,14 @@ mod test {
         let octree: Octree<usize> = Octree::new(Point3::origin(), None, 8);
         assert!(octree.get_octant(Point3::new(1, 2, 3)).is_none())
     }
+
+    #[test]
+    fn octree_returns_expected_octant_with_full_octree() {
+        let octree: Octree<usize> = Octree::new(Point3::origin(), Some(1), 8);
+        let octant = octree.get_octant(Point3::new(128, 128, 128));
+        assert_eq!(
+            octant.map(|o| &o.bounds),
+            Some(&OctantDimensions::new(Point3::origin(), 256))
+        );
+    }
 }

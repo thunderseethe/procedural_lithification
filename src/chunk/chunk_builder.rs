@@ -1,10 +1,6 @@
-use crate::chunk::{block::Block, parallel_drive_mut_node_children, Chunk};
+use crate::chunk::{block::Block, Chunk};
 use crate::dimension::morton_code::MortonCode;
-use crate::octree::{
-    octant_dimensions::OctantDimensions,
-    octree_data::OctreeData,
-    {Number, Octree},
-};
+use crate::octree::{Number, Octree};
 use amethyst::core::nalgebra::Point3;
 use either::Either;
 use rayon::iter::{plumbing::*, *};

@@ -3,13 +3,13 @@ extern crate criterion;
 extern crate cubes_lib;
 
 use amethyst::core::nalgebra::Point3;
-use criterion::{Criterion, Fun, ParameterizedBenchmark};
+use criterion::Criterion;
 use cubes_lib::terrain::Terrain;
 use std::time::Duration;
 
 fn chunk_meshing(c: &mut Criterion) {
     c.bench_function("chunk_meshing", |b| {
-        let chunk = Terrain::new().generate_chunk(Point3::origin());
+        let chunk = Terrain::default().generate_chunk(Point3::origin());
         b.iter(|| chunk.generate_mesh())
     });
 }

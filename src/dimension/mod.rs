@@ -1,4 +1,7 @@
-use crate::{chunk::Chunk, terrain::Terrain};
+use crate::{
+    chunk::Chunk,
+    terrain::{DefaultGenerateBlock, Terrain},
+};
 use amethyst::core::nalgebra::Point3;
 use parking_lot::{Mutex, MutexGuard};
 use std::{
@@ -35,7 +38,7 @@ impl DimensionConfig {
 }
 
 pub struct Dimension {
-    terrain: Terrain,
+    terrain: Terrain<DefaultGenerateBlock>,
     storage: DimensionStorage,
 }
 
@@ -44,7 +47,7 @@ unsafe impl Sync for Dimension {}
 impl Default for Dimension {
     fn default() -> Self {
         Dimension {
-            terrain: Terrain::new(),
+            terrain: Terrain::default().with_seed(100000024),
             storage: DimensionStorage::new(),
         }
     }

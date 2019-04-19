@@ -1,12 +1,9 @@
 use crate::mut_ptr::MultiThreadMutPtr;
-use crate::octree::{octant_dimensions::*, octant_face::OctantFace, octree_data::OctreeData, *};
+use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
 use amethyst::{
-    core::nalgebra::{convert, Point3, Scalar, Unit, Vector2, Vector3},
-    renderer::{MeshData, PosNormTangTex, PosNormTex},
+    core::nalgebra::{convert, Point3, Vector2, Vector3},
+    renderer::{MeshData, PosNormTex},
 };
-use array_init::array_init;
-use num_traits::One;
-use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use rayon::iter::{plumbing::*, *};
 use std::{borrow::Borrow, sync::Arc};
 
@@ -62,70 +59,77 @@ impl Chunk {
     }
 
     pub fn generate_mesh(&self) -> Option<Vec<(Point3<f32>, MeshData)>> {
-        let root_octree = &self.octree;
-        let chunk_render_pos: Point3<f32> = Point3::new(
+        let chunk_render_pos: Point3<f32> = convert(self.pos * 256)/*Point3::new(
             (self.pos.x * 256) as f32,
             (self.pos.y * 256) as f32,
             (self.pos.z * 256) as f32,
-        );
+        )*/;
         self.octree.map(
             || None,
             |_| {
                 // Trivial cube
-                let mesh = cube_mesh(
-                    Point3::new(0.0, 0.0, 0.0),
-                    256.0,
-                    &[true, true, true, true, true, true],
-                )
-                .into();
+                let mesh = cube_mesh(256.0).into();
                 Some(vec![(chunk_render_pos, mesh)])
             },
             |children| {
                 Some(
                     children
-                        .iter()
-                        .filter_map(|octree| {
-                            if octree.is_empty() {
-                                return None;
-                            }
-                            //let mesh: MeshData = octree
-                            //    .par_iter()
-                            //    .map(|(dim, _)| {
-                            //        let faces: [bool; 6] = array_init(|i| {
-                            //            let face = OctantFace::from_usize(i).unwrap();
-                            //            if root_octree.face_boundary_adjacent(&dim, face) {
-                            //                true
-                            //            } else {
-                            //                root_octree.check_octant_face_visible(
-                            //                    dim.face_adjacent_point(face),
-                            //                    dim.diameter(),
-                            //                )
-                            //            }
-                            //        });
-                            //        cube_mesh(
-                            //            convert(dim.bottom_left()),
-                            //            dim.diameter() as f32,
-                            //            &faces,
-                            //        )
-                            //    })
-                            //    .reduce(
-                            //        || Vec::new(),
-                            //        |mut vec1, vec2| {
-                            //            vec1.extend(vec2);
-                            //            vec1
-                            //        },
-                            //    )
-                            //    .into();
-                            let mesher = Mesher::new(&octree);
-                            let quads = mesher.generate_quads_array();
-                            let mut mesh_data: Vec<PosNormTex> =
-                                Vec::with_capacity(quads.len() * 6);
-                            mesh_data.extend(
-                                quads
-                                    .into_iter()
-                                    .flat_map(|quad| quad.mesh_coords(&self.pos)),
-                            );
-                            Some((chunk_render_pos, mesh_data.into()))
+                        .par_iter()
+                        .flat_map(|octree| {
+                            octree.map(
+                                || vec![],
+                                |_| {
+                                    let octree_offset: Vector3<f32> = convert(octree.root_point().coords)/*Vector3::new(
+                                        octree_root.x as f32,
+                                        octree_root.y as f32,
+                                        octree_root.z as f32,
+                                    )*/;
+                                    let mesh = cube_mesh(octree.bounds().diameter() as f32).into();
+                                    vec![(chunk_render_pos + octree_offset, mesh)]
+                                },
+                                |children| {
+                                    children
+                                        .par_iter()
+                                        .filter_map(|octree| {
+                                            let octree_root_offset: Vector3<f32> = convert(octree.root_point().coords)/*Vector3::new(
+                                                octree_root_point.x as f32,
+                                                octree_root_point.y as f32,
+                                                octree_root_point.z as f32,
+                                            )*/;
+
+                                            octree.map(
+                                                || None,
+                                                |_| {
+                                                    Some(
+                                                        (
+                                                            chunk_render_pos + octree_root_offset,
+                                                            cube_mesh(
+                                                                octree.bounds().diameter() as f32
+                                                            )
+                                                            .into(),
+                                                        ),
+                                                    )
+                                                },
+                                                |_| {
+                                                    let mesher = Mesher::new(&octree);
+                                                    let quads = mesher.generate_quads_array();
+                                                    let mut mesh_data: Vec<PosNormTex> =
+                                                        Vec::with_capacity(quads.len() * 6);
+                                                    mesh_data.extend(
+                                                        quads
+                                                            .into_iter()
+                                                            .flat_map(|quad| quad.mesh_coords()),
+                                                    );
+                                                    Some((
+                                                        chunk_render_pos + octree_root_offset,
+                                                        mesh_data.into(),
+                                                    ))
+                                                },
+                                            )
+                                        })
+                                        .collect::<Vec<(Point3<f32>, MeshData)>>()
+                                },
+                            )
                         })
                         .collect(),
                 )
@@ -133,63 +137,8 @@ impl Chunk {
         )
     }
 
-    pub fn block_iter<'a>(&'a self) -> SingleBlockIterator<'a> {
-        SingleBlockIterator {
-            iter: self.octree.iter(),
-            state: None,
-        }
-    }
-
     pub fn iter<'a>(&'a self) -> OctreeIterator<'a, Block> {
         self.octree.iter()
-    }
-}
-
-pub struct SingleBlockIterator<'a> {
-    iter: OctreeIterator<'a, Block>,
-    state: Option<(&'a OctantDimensions, &'a Block, Point3<Number>)>,
-}
-
-impl<'a> SingleBlockIterator<'a> {
-    fn increment(&self, dim: &'a OctantDimensions, point: Point3<Number>) -> Point3<Number> {
-        let mut result = Point3::new(point.x + 1, point.y, point.z);
-        if result.x > dim.x_max() {
-            result.x = dim.x_min();
-            result.y += 1;
-        }
-        if result.y > dim.y_max() {
-            result.y = dim.y_min();
-            result.z += 1;
-        }
-        if result.z > dim.z_max() {
-            panic!("Iter should have stopped before leaving dimension bounds");
-        }
-        return result;
-    }
-}
-
-impl<'a> Iterator for SingleBlockIterator<'a> {
-    type Item = (Point3<Number>, &'a Block);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.state
-            .and_then(|(dim, block, point)| {
-                if convert::<Point3<u8>, Point3<u16>>(point) == dim.top_right() {
-                    self.state = None;
-                    self.next()
-                } else {
-                    let new_point = self.increment(dim, point);
-                    self.state = Some((dim, block, new_point));
-                    Some((new_point, block))
-                }
-            })
-            .or_else(|| {
-                self.iter.next().map(|(dim, block)| {
-                    let point = Point3::new(dim.x_min(), dim.y_min(), dim.z_min());
-                    self.state = Some((dim, block, point));
-                    (point, block)
-                })
-            })
     }
 }
 
@@ -273,7 +222,7 @@ where
     reducer.reduce(left, right)
 }
 
-pub fn cube_mesh(pos: Point3<f32>, size: f32, faces: &[bool; 6]) -> Vec<PosNormTangTex> {
+pub fn cube_mesh(size: f32) -> Vec<PosNormTex> {
     // normal
     let n = [
         Vector3::new(0.0, 0.0, 1.0),
@@ -283,18 +232,8 @@ pub fn cube_mesh(pos: Point3<f32>, size: f32, faces: &[bool; 6]) -> Vec<PosNormT
         Vector3::new(1.0, 0.0, 0.0),
         Vector3::new(-1.0, 0.0, 0.0),
     ];
-    // tangent
-    let t = [
-        Vector3::new(-1.0, 0.0, 0.0),
-        Vector3::new(0.0, -1.0, 0.0),
-        Vector3::new(1.0, 0.0, 0.0),
-        Vector3::new(1.0, 0.0, 0.0),
-        Vector3::new(0.0, 0.0, -1.0),
-        Vector3::new(0.0, 0.0, 1.0),
-    ];
 
-    let vertex_count = faces.iter().map(|f| if *f { 6 } else { 0 }).sum();
-    let mut vec = Vec::with_capacity(vertex_count);
+    let mut vec = Vec::with_capacity(36);
 
     // textures
     let tx = [
@@ -304,84 +243,69 @@ pub fn cube_mesh(pos: Point3<f32>, size: f32, faces: &[bool; 6]) -> Vec<PosNormT
         Vector2::new(size, size),
     ];
     // vertices
-    let base = Vector3::new(pos.x, pos.y, pos.z);
     let v = [
-        base + Vector3::new(0.0, 0.0, size),   // 0
-        base + Vector3::new(size, 0.0, size),  // 1
-        base + Vector3::new(0.0, size, size),  // 2
-        base + Vector3::new(size, size, size), // 3
-        base + Vector3::new(0.0, size, 0.0),   // 4
-        base + Vector3::new(size, size, 0.0),  // 5
-        base + Vector3::new(0.0, 0.0, 0.0),    // 6
-        base + Vector3::new(size, 0.0, 0.0),   // 7
+        /*base +*/ Vector3::new(0.0, 0.0, size), // 0
+        /*base +*/ Vector3::new(size, 0.0, size), // 1
+        /*base +*/ Vector3::new(0.0, size, size), // 2
+        /*base +*/ Vector3::new(size, size, size), // 3
+        /*base +*/ Vector3::new(0.0, size, 0.0), // 4
+        /*base +*/ Vector3::new(size, size, 0.0), // 5
+        /*base +*/ Vector3::new(0.0, 0.0, 0.0), // 6
+        /*base +*/ Vector3::new(size, 0.0, 0.0), // 7
     ];
     // Back
-    if faces[0] {
-        vec.push(pos_norm_tang_tex(v[0], n[0], t[0], tx[0])); // (0, 0, 1)
-        vec.push(pos_norm_tang_tex(v[1], n[0], t[0], tx[1])); // (1, 0, 1)
-        vec.push(pos_norm_tang_tex(v[2], n[0], t[0], tx[2])); // (0, 1, 1)
-        vec.push(pos_norm_tang_tex(v[2], n[0], t[0], tx[2])); // (0, 1, 1)
-        vec.push(pos_norm_tang_tex(v[1], n[0], t[0], tx[1])); // (1, 0, 1)
-        vec.push(pos_norm_tang_tex(v[3], n[0], t[0], tx[3])); // (1, 1, 1)
-    }
-    // Up
-    if faces[1] {
-        vec.push(pos_norm_tang_tex(v[2], t[1], n[1], tx[0])); // (0, 1, 1)
-        vec.push(pos_norm_tang_tex(v[3], t[1], n[1], tx[1])); // (1, 1, 1)
-        vec.push(pos_norm_tang_tex(v[4], t[1], n[1], tx[2])); // (0, 1, 0)
-        vec.push(pos_norm_tang_tex(v[4], t[1], n[1], tx[2])); // (0, 1, 0)
-        vec.push(pos_norm_tang_tex(v[3], t[1], n[1], tx[1])); // (1, 1, 1)
-        vec.push(pos_norm_tang_tex(v[5], t[1], n[1], tx[3])); // (1, 1, 0)
-    }
-    // Front
-    if faces[2] {
-        vec.push(pos_norm_tang_tex(v[4], t[2], n[2], tx[3])); // (0, 1, 0)
-        vec.push(pos_norm_tang_tex(v[5], t[2], n[2], tx[2])); // (1, 1, 0)
-        vec.push(pos_norm_tang_tex(v[6], t[2], n[2], tx[1])); // (0, 0, 0)
-        vec.push(pos_norm_tang_tex(v[6], t[2], n[2], tx[1])); // (0, 0, 0)
-        vec.push(pos_norm_tang_tex(v[5], t[2], n[2], tx[2])); // (1, 1, 0)
-        vec.push(pos_norm_tang_tex(v[7], t[2], n[2], tx[0])); // (1, 0, 0)
-    }
-    // Down
-    if faces[3] {
-        vec.push(pos_norm_tang_tex(v[6], t[3], n[3], tx[0])); // (0, 0, 0)
-        vec.push(pos_norm_tang_tex(v[7], t[3], n[3], tx[1])); // (1, 0, 0)
-        vec.push(pos_norm_tang_tex(v[0], t[3], n[3], tx[2])); // (0, 0, 1)
-        vec.push(pos_norm_tang_tex(v[0], t[3], n[3], tx[2])); // (0, 0, 1)
-        vec.push(pos_norm_tang_tex(v[7], t[3], n[3], tx[1])); // (1, 0, 0)
-        vec.push(pos_norm_tang_tex(v[1], t[3], n[3], tx[3])); // (1, 0, 1)
-    }
-    // Right
-    if faces[4] {
-        vec.push(pos_norm_tang_tex(v[1], t[4], n[4], tx[0])); // (1, 0, 1)
-        vec.push(pos_norm_tang_tex(v[7], t[4], n[4], tx[1])); // (1, 0, 0)
-        vec.push(pos_norm_tang_tex(v[3], t[4], n[4], tx[2])); // (1, 1, 1)
-        vec.push(pos_norm_tang_tex(v[3], t[4], n[4], tx[2])); // (1, 1, 1)
-        vec.push(pos_norm_tang_tex(v[7], t[4], n[4], tx[1])); // (1, 0, 0)
-        vec.push(pos_norm_tang_tex(v[5], t[4], n[4], tx[3])); // (1, 1, 0)
-    }
-    // Left
-    if faces[5] {
-        vec.push(pos_norm_tang_tex(v[6], t[5], n[5], tx[0])); // (0, 0, 0)
-        vec.push(pos_norm_tang_tex(v[0], t[5], n[5], tx[1])); // (0, 0, 1)
-        vec.push(pos_norm_tang_tex(v[4], t[5], n[5], tx[2])); // (0, 1, 0)
-        vec.push(pos_norm_tang_tex(v[4], t[5], n[5], tx[2])); // (0, 1, 0)
-        vec.push(pos_norm_tang_tex(v[0], t[5], n[5], tx[1])); // (0, 0, 1)
-        vec.push(pos_norm_tang_tex(v[2], t[5], n[5], tx[3])); // (0, 1, 1)
-    }
+    vec.push(pos_norm_tex(v[0], n[0], tx[0])); // (0, 0, 1)
+    vec.push(pos_norm_tex(v[1], n[0], tx[1])); // (1, 0, 1)
+    vec.push(pos_norm_tex(v[2], n[0], tx[2])); // (0, 1, 1)
+    vec.push(pos_norm_tex(v[2], n[0], tx[2])); // (0, 1, 1)
+    vec.push(pos_norm_tex(v[1], n[0], tx[1])); // (1, 0, 1)
+    vec.push(pos_norm_tex(v[3], n[0], tx[3])); // (1, 1, 1)
+                                               // Up
+    vec.push(pos_norm_tex(v[2], n[1], tx[0])); // (0, 1, 1)
+    vec.push(pos_norm_tex(v[3], n[1], tx[1])); // (1, 1, 1)
+    vec.push(pos_norm_tex(v[4], n[1], tx[2])); // (0, 1, 0)
+    vec.push(pos_norm_tex(v[4], n[1], tx[2])); // (0, 1, 0)
+    vec.push(pos_norm_tex(v[3], n[1], tx[1])); // (1, 1, 1)
+    vec.push(pos_norm_tex(v[5], n[1], tx[3])); // (1, 1, 0)
+                                               // Front
+    vec.push(pos_norm_tex(v[4], n[2], tx[3])); // (0, 1, 0)
+    vec.push(pos_norm_tex(v[5], n[2], tx[2])); // (1, 1, 0)
+    vec.push(pos_norm_tex(v[6], n[2], tx[1])); // (0, 0, 0)
+    vec.push(pos_norm_tex(v[6], n[2], tx[1])); // (0, 0, 0)
+    vec.push(pos_norm_tex(v[5], n[2], tx[2])); // (1, 1, 0)
+    vec.push(pos_norm_tex(v[7], n[2], tx[0])); // (1, 0, 0)
+                                               // Down
+    vec.push(pos_norm_tex(v[6], n[3], tx[0])); // (0, 0, 0)
+    vec.push(pos_norm_tex(v[7], n[3], tx[1])); // (1, 0, 0)
+    vec.push(pos_norm_tex(v[0], n[3], tx[2])); // (0, 0, 1)
+    vec.push(pos_norm_tex(v[0], n[3], tx[2])); // (0, 0, 1)
+    vec.push(pos_norm_tex(v[7], n[3], tx[1])); // (1, 0, 0)
+    vec.push(pos_norm_tex(v[1], n[3], tx[3])); // (1, 0, 1)
+                                               // Right
+    vec.push(pos_norm_tex(v[1], n[4], tx[0])); // (1, 0, 1)
+    vec.push(pos_norm_tex(v[7], n[4], tx[1])); // (1, 0, 0)
+    vec.push(pos_norm_tex(v[3], n[4], tx[2])); // (1, 1, 1)
+    vec.push(pos_norm_tex(v[3], n[4], tx[2])); // (1, 1, 1)
+    vec.push(pos_norm_tex(v[7], n[4], tx[1])); // (1, 0, 0)
+    vec.push(pos_norm_tex(v[5], n[4], tx[3])); // (1, 1, 0)
+                                               // Left
+    vec.push(pos_norm_tex(v[6], n[5], tx[0])); // (0, 0, 0)
+    vec.push(pos_norm_tex(v[0], n[5], tx[1])); // (0, 0, 1)
+    vec.push(pos_norm_tex(v[4], n[5], tx[2])); // (0, 1, 0)
+    vec.push(pos_norm_tex(v[4], n[5], tx[2])); // (0, 1, 0)
+    vec.push(pos_norm_tex(v[0], n[5], tx[1])); // (0, 0, 1)
+    vec.push(pos_norm_tex(v[2], n[5], tx[3])); // (0, 1, 1)
     return vec;
 }
 
-fn pos_norm_tang_tex(
+fn pos_norm_tex(
     position: Vector3<f32>,
     normal: Vector3<f32>,
-    tangent: Vector3<f32>,
     tex_coord: Vector2<f32>,
-) -> PosNormTangTex {
-    PosNormTangTex {
+) -> PosNormTex {
+    PosNormTex {
         position,
         normal,
-        tangent,
         tex_coord,
     }
 }
@@ -392,64 +316,23 @@ mod test {
     use crate::octree::Octree;
     use std::collections::HashSet;
 
-    macro_rules! set {
-        ($($ele:expr),*) => {{
-            let mut set = HashSet::new();
-            $(
-                set.insert($ele);
-            )*
-            set
-        }};
-    }
-
-    #[test]
-    fn test_chunk_iterator() {
-        let mut chunk = Chunk::new(Point3::new(0, 0, 0), Octree::with_uniform_dimension(8));
-        chunk
-            .place_block(Point3::new(0, 0, 0), 1)
-            .place_block(Point3::new(0, 0, 1), 2)
-            .place_block(Point3::new(0, 1, 0), 3)
-            .place_block(Point3::new(0, 1, 1), 4)
-            .place_block(Point3::new(1, 0, 0), 5)
-            .place_block(Point3::new(1, 0, 1), 6)
-            .place_block(Point3::new(1, 1, 0), 7)
-            .place_block(Point3::new(1, 1, 1), 8);
-
-        let expected = set![
-            (Point3::new(1, 1, 1), &8),
-            (Point3::new(1, 1, 0), &7),
-            (Point3::new(1, 0, 1), &6),
-            (Point3::new(1, 0, 0), &5),
-            (Point3::new(0, 1, 1), &4),
-            (Point3::new(0, 1, 0), &3),
-            (Point3::new(0, 0, 1), &2),
-            (Point3::new(0, 0, 0), &1)
-        ];
-        for point_and_block in chunk.block_iter() {
-            assert!(
-                expected.contains(&point_and_block),
-                "Expected {:?} at point {:?}",
-                point_and_block.1,
-                point_and_block.0
-            );
-        }
-    }
-
     #[test]
     fn test_chunk_insertions() {
+        let mut points = HashSet::new();
         let mut chunk = Chunk::new(Point3::new(0, 0, 0), Octree::with_uniform_dimension(8));
         for _ in 0..1000 {
-            chunk.place_block(
-                Point3::new(
-                    rand::random::<u8>().into(),
-                    rand::random::<u8>().into(),
-                    rand::random::<u8>().into(),
-                ),
-                1234,
+            let p = Point3::new(
+                rand::random::<u8>().into(),
+                rand::random::<u8>().into(),
+                rand::random::<u8>().into(),
             );
+            chunk.place_block(&p, 1234);
+            points.insert(p);
         }
 
-        println!("{:?}", chunk);
+        for point in points {
+            assert_eq!(chunk.get_block(point), Some(1234));
+        }
     }
 
 }
