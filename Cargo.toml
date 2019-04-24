@@ -1,7 +1,7 @@
 [package]
 name = "cubes"
 version = "0.1.0"
-authors = ["thunderseethe.dev@gmail.com"]
+authors = ["thunderseethe.dev@gmail.com", "stephanstross@gmail.com"]
 edition="2018"
 
 [lib]
