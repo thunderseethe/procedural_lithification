@@ -10,7 +10,6 @@ use std::{borrow::Borrow, sync::Arc};
 pub mod block;
 pub mod chunk_builder;
 pub mod mesher;
-pub mod file_format;
 
 use block::Block;
 use mesher::Mesher;
