@@ -8,7 +8,7 @@ pub mod octant;
 pub mod octant_dimensions;
 pub mod octant_face;
 pub mod octree_data;
-//mod type_int_octree;
+mod type_int_octree;
 
 use octant::Octant;
 use octant_dimensions::OctantDimensions;
@@ -92,42 +92,42 @@ impl<E: PartialEq> Octree<E> {
         }
     }
 
-    pub fn face_boundary_adjacent(&self, dim: &OctantDimensions, face: OctantFace) -> bool {
-        use octant_face::OctantFace::*;
-        match face {
-            Back => dim.z_max() >= self.bounds.z_max(),
-            Up => dim.y_max() >= self.bounds.y_max(),
-            Front => dim.z_min() <= self.bounds.z_min(),
-            Down => dim.y_min() <= self.bounds.y_min(),
-            Right => dim.x_max() >= self.bounds.x_max(),
-            Left => dim.x_min() <= self.bounds.x_min(),
-        }
-    }
+    //pub fn face_boundary_adjacent(&self, dim: &OctantDimensions, face: OctantFace) -> bool {
+    //    use octant_face::OctantFace::*;
+    //    match face {
+    //        Back => dim.z_max() >= self.bounds.z_max(),
+    //        Up => dim.y_max() >= self.bounds.y_max(),
+    //        Front => dim.z_min() <= self.bounds.z_min(),
+    //        Down => dim.y_min() <= self.bounds.y_min(),
+    //        Right => dim.x_max() >= self.bounds.x_max(),
+    //        Left => dim.x_min() <= self.bounds.x_min(),
+    //    }
+    //}
 
-    pub fn check_octant_face_visible<P>(&self, pos: P, diameter: u16) -> bool
-    where
-        P: Borrow<Point3<Number>>,
-    {
-        if self.outside_bounds(pos.borrow()) {
-            true
-        } else {
-            self.check_octant_face_visible_(pos, diameter)
-        }
-    }
-    fn check_octant_face_visible_<P>(&self, pos: P, diameter: u16) -> bool
-    where
-        P: Borrow<Point3<Number>>,
-    {
-        match self.data {
-            Empty => true,
-            // When we encounter a leaf node our face is visible if the leaf node is smaller than the node we're drawing
-            Leaf(_) => self.bounds.diameter() < diameter,
-            Node(ref octants) => {
-                let index: usize = self.bounds.get_octant_index(pos.borrow());
-                octants[index].check_octant_face_visible_(pos, diameter)
-            }
-        }
-    }
+    //pub fn check_octant_face_visible<P>(&self, pos: P, diameter: u16) -> bool
+    //where
+    //    P: Borrow<Point3<Number>>,
+    //{
+    //    if self.outside_bounds(pos.borrow()) {
+    //        true
+    //    } else {
+    //        self.check_octant_face_visible_(pos, diameter)
+    //    }
+    //}
+    //fn check_octant_face_visible_<P>(&self, pos: P, diameter: u16) -> bool
+    //where
+    //    P: Borrow<Point3<Number>>,
+    //{
+    //    match self.data {
+    //        Empty => true,
+    //        // When we encounter a leaf node our face is visible if the leaf node is smaller than the node we're drawing
+    //        Leaf(_) => self.bounds.diameter() < diameter,
+    //        Node(ref octants) => {
+    //            let index: usize = self.bounds.get_octant_index(pos.borrow());
+    //            octants[index].check_octant_face_visible_(pos, diameter)
+    //        }
+    //    }
+    //}
 
     pub fn get<P>(&self, pos: P) -> Option<&E>
     where
