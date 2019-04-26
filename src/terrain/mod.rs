@@ -124,3 +124,50 @@ where
         chunk_to_be.build()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_generating_plateau_works_correctly() {
+        let terrain = Terrain::default().with_block_generator(
+            |_height_map: &HeightMap, p: &Point3<Number>| {
+                if p.y < 128 {
+                    Some(1)
+                } else {
+                    None
+                }
+            },
+        );
+        let chunk = terrain.generate_chunk(Point3::origin());
+        println!("{:?}", chunk);
+        for (dim, block) in chunk.iter() {
+            assert_eq!(block, &1);
+            assert!(dim.bottom_left.y < 128);
+        }
+    }
+
+    #[test]
+    fn test_generating_sphere_works_correctly() {
+        let terrain = Terrain::default().with_block_generator(
+            |_height_map: &HeightMap, p: &Point3<Number>| {
+                let x = p.x as isize - 128;
+                let y = p.y as isize - 128;
+                let z = p.z as isize - 128;
+                if x * x + y * y + z * z <= 64 * 64 {
+                    Some(1)
+                } else {
+                    None
+                }
+            },
+        );
+        let chunk = terrain.generate_chunk(Point3::origin());
+        for (dim, block) in chunk.iter() {
+            let x = dim.bottom_left.x as isize - 128;
+            let y = dim.bottom_left.y as isize - 128;
+            let z = dim.bottom_left.z as isize - 128;
+            assert!(x * x + y * y + z * z <= 64 * 64);
+        }
+    }
+}

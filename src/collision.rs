@@ -35,55 +35,66 @@ enum CollisionDetectionError {
 
 // better name
 struct CollisionDetection {
-    world: CollisionWorld<f32, ()>,
+    world: CollisionWorld<f32, ShapeHandle<f32>>,
+    player_handle: CollisionObjectHandle,
     terrain_handles: HashMap<Point3<i32>, Vec<CollisionObjectHandle>>,
 }
 
 impl CollisionDetection {
-    pub fn new() -> Self {
+    pub fn new(player_pos: Point3<f32>) -> Self {
         let mut world = CollisionWorld::new(0.2);
-        world.register_broad_phase_pair_filter(
-            "group_membership_filter",
-            CollisionGroupsPairFilter::new(),
-        );
+        let isometry = Isometry::translation(player_pos.x, player_pos.y, player_pos.z);
+        let shape = ShapeHandle::new(Cuboid::new(Vector::new(0.5, 1.0, 0.5)));
+        let player_handle = world
+            .add(
+                isometry,
+                shape.clone(),
+                CollisionGroups::new()
+                    .with_membership(&[PLAYER_GROUP])
+                    .with_blacklist(&[PLAYER_GROUP]),
+                GeometricQueryType::Proximity(0.1),
+                shape,
+            )
+            .handle();
         CollisionDetection {
             world: world,
+            player_handle,
             terrain_handles: HashMap::new(),
         }
     }
 
-    //pub fn set_player_pos<P>(&mut self, pos: P)
-    //where
-    //    P: Borrow<Point3<f32>>,
-    //{
-    //    let p = pos.borrow();
-    //    self.world
-    //        .set_position(self.player_handle, Isometry::translation(p.x, p.y, p.z));
-    //}
+    pub fn set_player_pos<P>(&mut self, pos: P)
+    where
+        P: Borrow<Point3<f32>>,
+    {
+        let p = pos.borrow();
+        self.world
+            .set_position(self.player_handle, Isometry::translation(p.x, p.y, p.z));
+    }
 
     pub fn add_chunk(&mut self, chunk: &Chunk) -> Result<(), CollisionDetectionError> {
-        let root = chunk.pos * 256;
         if self.terrain_handles.contains_key(&chunk.pos) {
             return Err(CollisionDetectionError::ChunkAlreadyPresent);
         }
+        let root = chunk.pos * 256;
         let terrain_handles = chunk
             .iter()
             .map(|(dimensions, _)| {
                 let rel_pos: Point3<i32> = na::convert(dimensions.bottom_left);
                 let pos: Point3<f32> = na::convert(root + rel_pos.coords);
-                let isometry = Isometry::translation(pos.x, pos.y, pos.z);
                 let radius = (dimensions.diameter() / 2) as f32;
+                let isometry =
+                    Isometry::translation(pos.x + radius, pos.y + radius, pos.z + radius);
                 let shape = ShapeHandle::new(Cuboid::new(Vector::new(radius, radius, radius)));
-                println!("Adding cube of size {:?} as {}", dimensions, isometry);
                 self.world
                     .add(
                         isometry,
-                        shape,
+                        shape.clone(),
                         CollisionGroups::new()
                             .with_membership(&[TERRAIN_GROUP])
                             .with_blacklist(&[TERRAIN_GROUP]),
                         GeometricQueryType::Proximity(0.2),
-                        (),
+                        shape,
                     )
                     .handle()
             })
@@ -119,7 +130,7 @@ mod test {
 
     #[test]
     fn test_proximity_event_created_for_player_near_chunk() {
-        let mut world = CollisionDetection::new();
+        let mut world = CollisionDetection::new(Point3::origin());
         let chunk = Terrain::default()
             .with_block_generator(
                 |_height_map: &HeightMap, p: &Point3<Number>| {
@@ -135,16 +146,18 @@ mod test {
             .add_chunk(&chunk)
             .expect("Empty world contained a chunk");
         world.update();
-        let player_ray = Ray::new(Point::new(128., 128., 128.), Vector::new(1., 0., 1.));
-        let groups = CollisionGroups::default()
+        let player_ray = Ray::new(Point::new(64., 64., -2.), Vector::new(0., 0., 1.));
+        let groups = CollisionGroups::new()
             .with_membership(&[PLAYER_GROUP])
-            .with_whitelist(&[TERRAIN_GROUP, ENTITY_GROUP])
             .with_blacklist(&[PLAYER_GROUP]);
 
         let intersections = world.world.interferences_with_ray(&player_ray, &groups);
         for (_, intersection) in intersections {
             println!("intersection: {:?}", intersection);
-            assert_eq!(intersection.toi, 1.);
+            println!(
+                "point of contact: {}",
+                player_ray.origin + player_ray.dir * intersection.toi
+            );
         }
     }
 }

@@ -59,11 +59,7 @@ impl Chunk {
     }
 
     pub fn generate_mesh(&self) -> Option<Vec<(Point3<f32>, MeshData)>> {
-        let chunk_render_pos: Point3<f32> = convert(self.pos * 256)/*Point3::new(
-            (self.pos.x * 256) as f32,
-            (self.pos.y * 256) as f32,
-            (self.pos.z * 256) as f32,
-        )*/;
+        let chunk_render_pos: Point3<f32> = convert(self.pos * 256);
         self.octree.map(
             || None,
             |_| {
@@ -79,11 +75,8 @@ impl Chunk {
                             octree.map(
                                 || vec![],
                                 |_| {
-                                    let octree_offset: Vector3<f32> = convert(octree.root_point().coords)/*Vector3::new(
-                                        octree_root.x as f32,
-                                        octree_root.y as f32,
-                                        octree_root.z as f32,
-                                    )*/;
+                                    let octree_offset: Vector3<f32> =
+                                        convert(octree.root_point().coords);
                                     let mesh = cube_mesh(octree.bounds().diameter() as f32).into();
                                     vec![(chunk_render_pos + octree_offset, mesh)]
                                 },
@@ -91,11 +84,8 @@ impl Chunk {
                                     children
                                         .par_iter()
                                         .filter_map(|octree| {
-                                            let octree_root_offset: Vector3<f32> = convert(octree.root_point().coords)/*Vector3::new(
-                                                octree_root_point.x as f32,
-                                                octree_root_point.y as f32,
-                                                octree_root_point.z as f32,
-                                            )*/;
+                                            let octree_root_offset: Vector3<f32> =
+                                                convert(octree.root_point().coords);
 
                                             octree.map(
                                                 || None,
