@@ -1,13 +1,14 @@
 use std::sync::Arc;
 use std::iter::Iterator;
 use amethyst::core::nalgebra::Point3;
+use array_init;
 
 use crate::chunk::block::Block;
 use crate::chunk::Chunk;
 use crate::octree::{
     Octree,
     octree_data::OctreeData,
-    octant::Octant,
+    octant::{Octant, OctantIter},
     octant_dimensions::OctantDimensions,
 };
 
@@ -44,7 +45,7 @@ fn variants_to_bytes(vars: Vec<NodeVariant>) -> Vec<u8> {
         *accum |= mask;
     }
     // Should only need this one allocation.
-    let mut accum_vec = Vec::with_capacity((vars.len()/4 + 1));
+    let mut accum_vec = Vec::with_capacity(vars.len()/4 + 1);
     // Accumulates 4 variants into one byte
     let mut accum_byte = 0x00;
     // Tracks the number of accumulations into the accumulator byte. Reset at 4.
@@ -101,14 +102,14 @@ fn chunk_lists_to_bytes(nodes: Vec<NodeVariant>, blocks:Vec<Block>) -> Vec<u8>{
     }
     bytes
 }
-fn bytes_to_chunk_lists(bytes: Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
-    struct VarIter {
+fn bytes_to_chunk_lists(bytes: &Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
+    struct VarIter<'a> {
         byte: usize,
         shift: u8,
-        data: Vec<u8>,
+        data: &'a Vec<u8>,
     }
-    impl VarIter {
-        fn new(data: Vec<u8>) -> Self {Self {byte: 0, shift: 0, data}}
+    impl <'a> VarIter <'a> {
+        fn new(data: &'a Vec<u8>) -> Self {Self {byte: 0, shift: 0, data}}
         fn next(&mut self) -> NodeVariant {
             if self.shift >= 4 {
                 self.shift = 0;
@@ -159,11 +160,12 @@ fn bytes_to_chunk_lists(bytes: Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
         block |= b3 << 08;
         block |= b4 << 00;
         blocks.push(block);
+        block_num += 1;
     }
     (nodes, blocks)
 }
 
-fn chunk_to_bytes(chunk: Chunk) -> Vec<u8> {
+pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
     fn empty_octree_translate() -> (Vec<NodeVariant>, Vec<Block>) {
         (vec!(NodeVariant::Empty), vec!())
     }
@@ -194,7 +196,7 @@ fn chunk_to_bytes(chunk: Chunk) -> Vec<u8> {
     );
     chunk_lists_to_bytes(vars, blocks)
 }
-fn bytes_to_chunk(bytes: Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
+pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     fn construct_tree<N, B>(nodes: &mut N, blocks: &mut B, height: u32, bounds: OctantDimensions) 
         -> Octree<Block>
         where N: Iterator<Item=NodeVariant>,
@@ -203,17 +205,18 @@ fn bytes_to_chunk(bytes: Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
             NodeVariant::Empty => OctreeData::Empty,
             NodeVariant::Leaf =>
                 OctreeData::Leaf(Arc::new(blocks.next().unwrap())),
-            NodeVariant::Branch =>OctreeData::Node([
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::LowLowLow.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::LowLowHigh.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::LowHighLow.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::LowHighHigh.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::HighLowLow.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::HighLowHigh.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::HighHighLow.sub_octant_bounds(&bounds))),
-                Arc::new(construct_tree(nodes, blocks, height-1, Octant::HighHighHigh.sub_octant_bounds(&bounds))),
-            ]),
-            NodeVariant::Error => panic!("Attempted to reconstitute an erroneous node value. Something something the bounding is fucked."),
+            NodeVariant::Branch =>OctreeData::Node(
+                array_init::from_iter(OctantIter::default().map(|octant|
+                    Arc::new(construct_tree(
+                        nodes,
+                        blocks,
+                        height-1,
+                        octant.sub_octant_bounds(&bounds)
+                    ))
+                )).expect("Recursive reconstruction of Octree failed.")
+            ),
+            NodeVariant::Error =>
+                panic!("Attempted to reconstitute an erroneous node value. Something something the bounding is fucked."),
         };
         Octree::with_fields(data, bounds, height)
     }
@@ -222,4 +225,24 @@ fn bytes_to_chunk(bytes: Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     let root_dims = OctantDimensions::new(Point3::new(0, 0, 0), 256);
     let root = construct_tree(&mut nodes, &mut blocks, 8, root_dims);
     Chunk {pos: chunk_pos, octree: root}
+}
+
+mod test {
+    use amethyst::core::nalgebra::Point3;
+
+    use crate::terrain::{Terrain, DefaultGenerateBlock};
+    use super::{chunk_to_bytes, bytes_to_chunk};
+    #[test]
+    fn translation_bidirectionality_test(){
+        // This test will be considered successful if the chunk stays the same
+        // after going through the encoding-decoding process. This shows that
+        // transcoding the chunk to a byte stream does not affect its value.
+        let chunk_generator = Terrain::<DefaultGenerateBlock>::default();
+        let center = Point3::new(0, 0, 0);
+        let test_chunk = chunk_generator.generate_chunk(center);
+        let rebuilt_chunk = bytes_to_chunk(&chunk_to_bytes(&test_chunk), center);
+        assert_eq!(test_chunk, rebuilt_chunk);
+    }
+
+
 }

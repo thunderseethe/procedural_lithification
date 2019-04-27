@@ -44,3 +44,7 @@ harness = false
 [[bench]]
 name = "chunk_meshing"
 harness = false
+
+[[bench]]
+name = "chunk_serialization"
+harness = false 
