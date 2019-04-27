@@ -17,19 +17,30 @@ fn insert_comparison(c: &mut Criterion) {
         ));
     }
     c.bench(
-        "Octree Insertion",
+        "octree_insertion",
         ParameterizedBenchmark::new(
-            "General Recursion",
-            |b, (p, i)| {
-                let octree: Octree<u32> = Octree::new(Point3::origin(), None, 8);
-                b.iter(|| octree.insert(p, *i))
+            "bounded_recursion",
+            |b, points| {
+                b.iter(|| {
+                    let mut octree: OctreeLevel<
+                        u32,
+                        u8,
+                        OctreeLevel<u32, u8, OctreeBase<u32, u8>>,
+                    > = OctreeLevel::new(LevelData::Empty, Point3::origin());
+                    for (p, i) in points {
+                        octree = octree.insert(p, *i);
+                    }
+                })
             },
-            test_data,
+            vec![test_data],
         )
-        .with_function("Bounded Recursion", |b, (p, i)| {
-            let octree: OctreeLevel<u32, u8, OctreeLevel<u32, u8, OctreeBase<u32, u8>>> =
-                OctreeLevel::new(LevelData::Empty, Point3::origin());
-            b.iter(|| octree.insert(p, *i))
+        .with_function("general_recursion", |b, points| {
+            b.iter(|| {
+                let mut octree: Octree<u32> = Octree::new(Point3::origin(), None, 8);
+                for (p, i) in points {
+                    octree = octree.insert(p, *i);
+                }
+            })
         }),
     );
 }

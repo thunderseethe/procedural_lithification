@@ -9,7 +9,7 @@ name = "cubes_lib"
 path = "src/lib.rs"
 
 [dev-dependencies]
-criterion = "0.2.9"
+criterion = "0.2.11"
 
 [profile.release]
 debug = true

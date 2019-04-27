@@ -267,7 +267,7 @@ where
             };
             Rc::new(octree)
         }))
-        .unwrap();
+        .expect("Failed to construct array from iterator");
         self.with_data(Node(octree_nodes)).compress_nodes()
     }
 }
