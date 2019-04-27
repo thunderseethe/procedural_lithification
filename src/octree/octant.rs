@@ -16,6 +16,7 @@ pub enum Octant {
     LowLowLow = 0,
 }
 use self::Octant::*;
+use crate::octree::type_int_octree::Number;
 
 impl Octant {
     fn is_x_high(&self) -> bool {
@@ -62,6 +63,32 @@ impl Octant {
             Point3::new(x_center, y_center, z_center),
             containing_bounds.diameter() / 2,
         )
+    }
+
+    pub fn sub_octant_bottom_left<N>(
+        &self,
+        containing_bottom_left: Point3<N>,
+        sub_octant_diameter: N,
+    ) -> Point3<N>
+    where
+        N: Number,
+    {
+        let x = if self.is_x_high() {
+            containing_bottom_left.x + sub_octant_diameter
+        } else {
+            containing_bottom_left.x
+        };
+        let y = if self.is_y_high() {
+            containing_bottom_left.y + sub_octant_diameter
+        } else {
+            containing_bottom_left.y
+        };
+        let z = if self.is_z_high() {
+            containing_bottom_left.z + sub_octant_diameter
+        } else {
+            containing_bottom_left.z
+        };
+        Point3::new(x, y, z)
     }
 
     /// Iterates over all variants of Octant
