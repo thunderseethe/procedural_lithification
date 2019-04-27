@@ -4,13 +4,18 @@ use num_traits::*;
 use std::borrow::Borrow;
 use std::rc::Rc;
 
-#[derive(PartialEq)]
-pub enum LevelData<E, O> {
+pub enum LevelData<O>
+where
+    O: OctreeTypes,
+{
     Node([Rc<O>; 8]),
-    Leaf(Rc<E>),
+    Leaf(Rc<O::Element>),
     Empty,
 }
-impl<E, O> Clone for LevelData<E, O> {
+impl<O> Clone for LevelData<O>
+where
+    O: OctreeTypes,
+{
     fn clone(&self) -> Self {
         use LevelData::*;
         match self {
@@ -20,13 +25,45 @@ impl<E, O> Clone for LevelData<E, O> {
         }
     }
 }
-#[derive(PartialEq)]
-pub struct OctreeLevel<E, N, O>
+impl<O> PartialEq for LevelData<O>
 where
-    N: Scalar,
+    O: OctreeTypes + PartialEq,
+    <O as ElementType>::Element: PartialEq,
 {
-    data: LevelData<E, O>,
-    bottom_left: Point3<N>,
+    fn eq(&self, other: &LevelData<O>) -> bool {
+        use LevelData::*;
+        match (self, other) {
+            (Node(node_a), Node(node_b)) => node_a == node_b,
+            (Leaf(elem_a), Leaf(elem_b)) => elem_a == elem_b,
+            (Empty, Empty) => true,
+            _ => false,
+        }
+    }
+}
+
+pub struct OctreeLevel<O>
+where
+    O: OctreeTypes,
+{
+    data: LevelData<O>,
+    bottom_left: Point3<O::Field>,
+}
+impl<O> PartialEq for OctreeLevel<O>
+where
+    O: OctreeTypes + PartialEq,
+    <O as ElementType>::Element: PartialEq,
+{
+    fn eq(&self, other: &OctreeLevel<O>) -> bool {
+        self.bottom_left.eq(&other.bottom_left) && self.data.eq(&other.data)
+    }
+}
+impl<O> Clone for OctreeLevel<O>
+where
+    O: OctreeTypes + Clone,
+{
+    fn clone(&self) -> Self {
+        OctreeLevel::new(self.data.clone(), self.bottom_left.clone())
+    }
 }
 
 #[derive(PartialEq)]
@@ -48,14 +85,9 @@ pub struct OctreeBase<E, N: Scalar> {
     data: BaseData<E>,
     bottom_left: Point3<N>,
 }
-impl<E, N: Scalar> Clone for OctreeBase<E, N> {
+impl<E, N: Number> Clone for OctreeBase<E, N> {
     fn clone(&self) -> Self {
         OctreeBase::new(self.data.clone(), self.bottom_left.clone())
-    }
-}
-impl<E, N: Scalar, O: Clone> Clone for OctreeLevel<E, N, O> {
-    fn clone(&self) -> Self {
-        OctreeLevel::new(self.data.clone(), self.bottom_left.clone())
     }
 }
 
@@ -68,20 +100,46 @@ impl<T> Number for T where
 {
 }
 
-pub trait Diameter<N> {
-    fn diameter() -> N;
+// Hello, it's your good pal bottom up recursion. Now with types
+pub trait ElementType {
+    type Element;
 }
-impl<E, N, O: Diameter<N>> Diameter<N> for OctreeLevel<E, N, O>
+pub trait FieldType {
+    type Field: Number;
+}
+
+impl<E, N: Scalar> ElementType for OctreeBase<E, N> {
+    type Element = E;
+}
+impl<E, N: Number> FieldType for OctreeBase<E, N> {
+    type Field = N;
+}
+
+impl<O: OctreeTypes> ElementType for OctreeLevel<O> {
+    type Element = O::Element;
+}
+impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
+    type Field = O::Field;
+}
+
+// Convenience wrapper to avoid busting my + key
+pub trait OctreeTypes: ElementType + FieldType {}
+impl<T> OctreeTypes for T where T: ElementType + FieldType {}
+
+pub trait Diameter: FieldType {
+    fn diameter() -> Self::Field;
+}
+impl<O> Diameter for OctreeLevel<O>
 where
-    N: Number,
+    O: Diameter + OctreeTypes,
 {
-    fn diameter() -> N {
-        O::diameter() << N::one()
+    fn diameter() -> Self::Field {
+        O::diameter() << Self::Field::one()
     }
 }
-impl<E, N> Diameter<N> for OctreeBase<E, N>
+impl<E, N> Diameter for OctreeBase<E, N>
 where
-    N: Scalar + Num,
+    N: Number,
 {
     fn diameter() -> N {
         N::one()
@@ -93,8 +151,11 @@ pub trait HasPosition {
 
     fn position(&self) -> &Self::Position;
 }
-impl<E, N: Scalar, O> HasPosition for OctreeLevel<E, N, O> {
-    type Position = Point3<N>;
+impl<O> HasPosition for OctreeLevel<O>
+where
+    O: OctreeTypes,
+{
+    type Position = Point3<<Self as FieldType>::Field>;
 
     fn position(&self) -> &Self::Position {
         &self.bottom_left
@@ -108,12 +169,15 @@ impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
     }
 }
 
-pub trait HasData {
-    type Data: Clone;
+pub trait HasData: ElementType {
+    type Data: Clone + Leaf<Rc<Self::Element>> + Empty;
     fn data(&self) -> &Self::Data;
 }
-impl<E, N: Scalar, O> HasData for OctreeLevel<E, N, O> {
-    type Data = LevelData<E, O>;
+impl<O> HasData for OctreeLevel<O>
+where
+    O: OctreeTypes,
+{
+    type Data = LevelData<O>;
 
     fn data(&self) -> &Self::Data {
         &self.data
@@ -131,7 +195,10 @@ pub trait Empty {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
 }
-impl<E, O> Empty for LevelData<E, O> {
+impl<O> Empty for LevelData<O>
+where
+    O: OctreeTypes,
+{
     fn empty() -> Self {
         LevelData::Empty
     }
@@ -161,8 +228,11 @@ pub trait Leaf<T> {
     fn is_leaf(&self) -> bool;
     fn get_leaf(&self) -> &T;
 }
-impl<E, O> Leaf<Rc<E>> for LevelData<E, O> {
-    fn leaf(value: Rc<E>) -> Self {
+impl<O> Leaf<Rc<O::Element>> for LevelData<O>
+where
+    O: OctreeTypes,
+{
+    fn leaf(value: Rc<O::Element>) -> Self {
         LevelData::Leaf(value)
     }
 
@@ -173,7 +243,7 @@ impl<E, O> Leaf<Rc<E>> for LevelData<E, O> {
         }
     }
 
-    fn get_leaf(&self) -> &Rc<E> {
+    fn get_leaf(&self) -> &Rc<O::Element> {
         match self {
             LevelData::Leaf(ref e) => e,
             _ => panic!("Called get_leaf() on non leaf node."),
@@ -201,24 +271,24 @@ impl<E> Leaf<Rc<E>> for BaseData<E> {
 }
 
 use std::ops::*;
-impl<E, N, O: Diameter<N>> OctreeLevel<E, N, O>
+impl<O> OctreeLevel<O>
 where
-    N: Number,
+    O: Diameter + OctreeTypes,
 {
     fn get_octant_index<P>(&self, pos: P) -> usize
     where
-        P: Borrow<Point3<N>>,
+        P: Borrow<Point3<<Self as FieldType>::Field>>,
     {
         self.get_octant(pos).to_usize().unwrap()
     }
 
     fn get_octant<P>(&self, pos_ref: P) -> Octant
     where
-        P: Borrow<Point3<N>>,
+        P: Borrow<Point3<<Self as FieldType>::Field>>,
     {
         use crate::octree::octant::Octant::*;
         let pos = pos_ref.borrow();
-        let r = Self::diameter() >> N::one();
+        let r = Self::diameter() >> <Self as FieldType>::Field::one();
         match (
             pos.x >= self.bottom_left.x + r,
             pos.y >= self.bottom_left.y + r,
@@ -235,23 +305,27 @@ where
         }
     }
 }
-impl<E, N: Scalar, O> OctreeLevel<E, N, O> {
-    fn with_data(&self, data: LevelData<E, O>) -> Self {
+impl<O: OctreeTypes> OctreeLevel<O> {
+    fn with_data(&self, data: LevelData<O>) -> Self {
         OctreeLevel {
             data: data,
             ..(*self.clone())
         }
     }
 }
-impl<E, N: Scalar, O> OctreeLevel<E, N, O>
+impl<O> OctreeLevel<O>
 where
-    N: Number,
-    O: Insert<E, N> + New<N> + Diameter<N> + HasData,
-    <O as HasData>::Data: PartialEq + Clone + Leaf<Rc<E>> + Empty,
+    O: Insert + New + Diameter + HasData,
+    <O as HasData>::Data: PartialEq,
 {
-    fn create_sub_nodes<P>(&self, pos: P, elem: Rc<E>, default: O::Data) -> Self
+    fn create_sub_nodes<P>(
+        &self,
+        pos: P,
+        elem: Rc<<Self as ElementType>::Element>,
+        default: O::Data,
+    ) -> Self
     where
-        P: Borrow<Point3<N>>,
+        P: Borrow<Point3<<Self as FieldType>::Field>>,
     {
         use crate::octree::octant::OctantIter;
         use LevelData::Node;
@@ -272,19 +346,18 @@ where
     }
 }
 
-pub trait Get<E, N: Scalar> {
-    fn get<P>(&self, pos: P) -> Option<&E>
+pub trait Get: OctreeTypes {
+    fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where
-        P: Borrow<Point3<N>>;
+        P: Borrow<Point3<Self::Field>>;
 }
-impl<E, N, O> Get<E, N> for OctreeLevel<E, N, O>
+impl<O> Get for OctreeLevel<O>
 where
-    N: Number,
-    O: Get<E, N> + Diameter<N>,
+    O: Get + Diameter,
 {
-    fn get<P>(&self, pos: P) -> Option<&E>
+    fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where
-        P: Borrow<Point3<N>>,
+        P: Borrow<Point3<Self::Field>>,
     {
         use LevelData::*;
         match self.data {
@@ -297,7 +370,7 @@ where
         }
     }
 }
-impl<E, N> Get<E, N> for OctreeBase<E, N>
+impl<E, N> Get for OctreeBase<E, N>
 where
     N: Number,
 {
@@ -313,23 +386,22 @@ where
     }
 }
 
-pub trait Insert<E, N: Scalar> {
+pub trait Insert: OctreeTypes {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
-        P: Borrow<Point3<N>>,
-        R: Into<Rc<E>>;
+        P: Borrow<Point3<Self::Field>>,
+        R: Into<Rc<Self::Element>>;
 }
-impl<E, N, O> Insert<E, N> for OctreeLevel<E, N, O>
+impl<O> Insert for OctreeLevel<O>
 where
-    E: PartialEq,
-    N: Number,
-    O: Insert<E, N> + New<N> + Diameter<N> + HasData,
-    <O as HasData>::Data: PartialEq + Leaf<Rc<E>> + Empty,
+    O: Insert + New + Diameter + HasData,
+    <O as HasData>::Data: PartialEq,
+    Self::Element: PartialEq,
 {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
-        P: Borrow<Point3<N>>,
-        R: Into<Rc<E>>,
+        P: Borrow<Point3<Self::Field>>,
+        R: Into<Rc<Self::Element>>,
     {
         use LevelData::*;
         match &self.data {
@@ -356,9 +428,9 @@ where
         }
     }
 }
-impl<E, N> Insert<E, N> for OctreeBase<E, N>
+impl<E, N> Insert for OctreeBase<E, N>
 where
-    N: Scalar,
+    N: Number,
 {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
@@ -369,16 +441,16 @@ where
     }
 }
 
-pub trait New<N: Scalar>: HasData {
-    fn new(data: Self::Data, bottom_left: Point3<N>) -> Self;
+pub trait New: HasData + FieldType {
+    fn new(data: Self::Data, bottom_left: Point3<Self::Field>) -> Self;
 }
-impl<E, N: Scalar> New<N> for OctreeBase<E, N> {
+impl<E, N: Number> New for OctreeBase<E, N> {
     fn new(data: Self::Data, bottom_left: Point3<N>) -> Self {
         OctreeBase { data, bottom_left }
     }
 }
-impl<E, N: Scalar, O> New<N> for OctreeLevel<E, N, O> {
-    fn new(data: Self::Data, bottom_left: Point3<N>) -> Self {
+impl<O: OctreeTypes> New for OctreeLevel<O> {
+    fn new(data: Self::Data, bottom_left: Point3<Self::Field>) -> Self {
         OctreeLevel { data, bottom_left }
     }
 }
@@ -386,9 +458,10 @@ impl<E, N: Scalar, O> New<N> for OctreeLevel<E, N, O> {
 pub trait Compress {
     fn compress_nodes(self) -> Self;
 }
-impl<E, N: Scalar, O: HasData> Compress for OctreeLevel<E, N, O>
+impl<O> Compress for OctreeLevel<O>
 where
-    <O as HasData>::Data: PartialEq + Clone + Leaf<Rc<E>> + Empty,
+    O: HasData + OctreeTypes,
+    <O as HasData>::Data: PartialEq,
 {
     fn compress_nodes(self) -> Self {
         use LevelData::*;
@@ -419,58 +492,4 @@ impl<E, N: Scalar> Compress for OctreeBase<E, N> {
     }
 }
 
-//impl<E, O> Into<LevelData<E, O>> for BaseData<E> {
-//    fn into(self) -> LevelData<E, O> {
-//        use BaseData::*;
-//        match self {
-//            Leaf(elem) => LevelData::leaf(elem),
-//            Empty => LevelData::empty(),
-//        }
-//    }
-//}
-//impl<E, N, O> Into<LevelData<E, OctreeLevel<E, N, O>>> for LevelData<E, O>
-//where
-//    N: Scalar,
-//    O: HasData + HasPosition<Position = Point3<N>>,
-//    <O as HasData>::Data: Into<LevelData<E, O>>,
-//{
-//    fn into(self) -> LevelData<E, OctreeLevel<E, N, O>> {
-//        use LevelData::*;
-//        match self {
-//            Empty => LevelData::empty(),
-//            Leaf(elem) => LevelData::leaf(elem),
-//            Node(nodes) => Node(array_init::array_init(|i| {
-//                Rc::new(OctreeLevel::from(Rc::clone(&nodes[i])))
-//            })),
-//        }
-//    }
-//}
-
-//impl<E, N, O> From<Rc<O>> for OctreeLevel<E, N, O>
-//where
-//    N: Scalar,
-//    O: HasData + HasPosition<Position = Point3<N>>,
-//    <O as HasData>::Data: Into<LevelData<E, O>> + Clone,
-//{
-//    fn from(lower: Rc<O>) -> Self {
-//        OctreeLevel::new(lower.data().clone().into(), *lower.position())
-//    }
-//}
-
-pub type Octree8<E, N> = OctreeLevel<
-    E,
-    N,
-    OctreeLevel<
-        E,
-        N,
-        OctreeLevel<
-            E,
-            N,
-            OctreeLevel<
-                E,
-                N,
-                OctreeLevel<E, N, OctreeLevel<E, N, OctreeLevel<E, N, OctreeBase<E, N>>>>,
-            >,
-        >,
-    >,
->;
+pub type Octree8<E, N> = OctreeBase<E, N>;
