@@ -4,6 +4,7 @@ use num_traits::FromPrimitive;
 use rayon::{iter::plumbing::*, prelude::*};
 use std::{borrow::Borrow, collections::VecDeque, fmt, sync::Arc};
 
+pub mod consts;
 pub mod octant;
 pub mod octant_dimensions;
 pub mod octant_face;
