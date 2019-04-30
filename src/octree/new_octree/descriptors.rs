@@ -31,11 +31,23 @@ impl<T> OctreeTypes for T where T: ElementType + FieldType {}
 
 /// Composite trait desciribing a numerical type that can be used for the coordinates of an Octree.
 pub trait Number:
-    Scalar + Num + NumCast + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
+    Scalar
+    + Num
+    + NumCast
+    + PartialOrd
+    + Shr<Self, Output = Self>
+    + Shl<Self, Output = Self>
+    + AsPrimitive<usize>
 {
 }
 impl<T> Number for T where
-    T: Scalar + Num + NumCast + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
+    T: Scalar
+        + Num
+        + NumCast
+        + PartialOrd
+        + Shr<Self, Output = Self>
+        + Shl<Self, Output = Self>
+        + AsPrimitive<usize>
 {
 }
 

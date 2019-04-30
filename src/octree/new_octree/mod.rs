@@ -23,7 +23,7 @@ pub use consts::{Octree, Octree8};
 
 /// Poor man's higher kinded types.
 /// Used to toggle the implementation between Ref and Arc;
-type Ref<T> = Arc<T>;
+type Ref<T> = Rc<T>;
 
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
@@ -232,12 +232,12 @@ where
         P: Borrow<<Self as HasPosition>::Position>,
     {
         let pos = pos_ref.borrow();
-        let diameter = num_traits::NumCast::from(<Self as Diameter>::diameter()).unwrap();
-        pos.x > self.bottom_left.x + diameter
+        let diameter: usize = <Self as Diameter>::diameter();
+        pos.x.as_() > self.bottom_left.x.as_() + diameter
             || pos.x < self.bottom_left.x
-            || pos.y > self.bottom_left.y + diameter
+            || pos.y.as_() > self.bottom_left.y.as_() + diameter
             || pos.y < self.bottom_left.y
-            || pos.z > self.bottom_left.z + diameter
+            || pos.z.as_() > self.bottom_left.z.as_() + diameter
             || pos.z < self.bottom_left.z
     }
 }
@@ -267,5 +267,64 @@ mod test {
                 bottom_left: Point3::origin(),
             }
         );
+    }
+
+    #[test]
+    fn octree_insert_handles_center_point() {
+        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin());
+
+        assert_eq!(
+            octree.insert(Point3::origin(), 1234).get(Point3::origin()),
+            Some(&1234)
+        );
+    }
+
+    #[test]
+    fn octree_element_retrieved_after_insertion_in_same_octants() {
+        let p1 = Point3::new(2, 2, 2);
+        let p2 = Point3::new(1, 1, 1);
+        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(&p1, 1234)
+            .insert(&p2, 5678);
+
+        assert_eq!(octree.get(&p1), Some(&1234));
+        assert_eq!(octree.get(&p2), Some(&5678));
+    }
+
+    #[test]
+    fn octree_element_retrieved_after_inserterion_in_diff_octants() {
+        let p1 = Point3::new(1, 1, 1);
+        let p2 = Point3::new(7, 7, 7);
+        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(&p1, 1234)
+            .insert(&p2, 5678);
+
+        assert_eq!(octree.get(&p1), Some(&1234));
+        assert_eq!(octree.get(&p2), Some(&5678));
+    }
+
+    #[test]
+    fn octree_insert_updates_element() {
+        let p = Point3::new(1, 1, 1);
+        let octree: Octree8<i32, u8> =
+            Octree8::new(LevelData::Empty, Point3::origin()).insert(&p, 1234);
+
+        assert_eq!(octree.get(&p), Some(&1234));
+
+        let octree = octree.insert(&p, 5678);
+        assert_eq!(octree.get(&p), Some(&5678));
+    }
+
+    #[test]
+    fn octree_deletes_expected_element() {
+        let p = Point3::new(4, 1, 1);
+        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(Point3::new(1, 1, 1), 1234)
+            .insert(Point3::new(1, 1, 2), 4567)
+            .insert(&p, 7890);
+
+        assert_eq!(octree.get(&p), Some(&7890));
+        let octree = octree.delete(&p);
+        assert_eq!(octree.get(&p), None);
     }
 }

@@ -22,7 +22,7 @@ fn insert_comparison(c: &mut Criterion) {
             "bounded_recursion",
             |b, points| {
                 b.iter(|| {
-                    let mut octree: OctreeLevel<OctreeLevel<OctreeBase<u32, u8>>> =
+                    let mut octree: Octree8<u32, u8> =
                         OctreeLevel::new(LevelData::Empty, Point3::origin());
                     for (p, i) in points {
                         octree = octree.insert(p, *i);
