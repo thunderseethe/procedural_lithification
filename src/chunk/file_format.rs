@@ -36,33 +36,6 @@ fn bits_to_variant(bits: u8) -> NodeVariant {
 }
 
 fn variants_to_bytes(vars: Vec<NodeVariant>) -> Vec<u8> {
-    //fn accum_var(accum: &mut u8, var: NodeVariant, pos: u8) {
-    //    let bits = variant_to_bits(var);
-    //    let mask = bits << (2 * (3 - pos));
-    //    *accum |= mask;
-    //}
-    //// Should only need this one allocation.
-    //let mut accum_vec = Vec::with_capacity(vars.len() / 4 + 1);
-    //// Accumulates 4 variants into one byte
-    //let mut accum_byte = 0x00;
-    //// Tracks the number of accumulations into the accumulator byte. Reset at 4.
-    //let mut shifts = 0;
-    //for var in vars {
-    //    accum_var(&mut accum_byte, var, shifts);
-    //    shifts += 1;
-    //    if shifts >= 4 {
-    //        accum_vec.push(accum_byte);
-    //        accum_byte = 0;
-    //        shifts = 0;
-    //    }
-    //}
-    //// Pad out the final byte with invalid values
-    //while shifts < 4 {
-    //    accum_var(&mut accum_byte, NodeVariant::Error, shifts);
-    //    shifts += 1;
-    //}
-    //accum_vec.push(accum_byte);
-    //accum_vec;
     vars.chunks(4)
         .map(|variants| {
             variants.into_iter().enumerate().fold(0, |byte, (i, var)| {
@@ -85,11 +58,6 @@ fn bytes_to_variants<'a>(bytes: Vec<u8>) -> Vec<NodeVariant> {
 }
 
 fn block_to_bytes(block: Block) -> [u8; 4] {
-    //let v1 = ((block >> 24) & 0xFF) as u8;
-    //let v2 = ((block >> 16) & 0xFF) as u8;
-    //let v3 = ((block >> 08) & 0xFF) as u8;
-    //let v4 = ((block >> 00) & 0xFF) as u8;
-    //[v1, v2, v3, v4];
     array_init::array_init(|i| ((block >> (3 - i) * 8) & 0xFF) as u8)
 }
 fn bytes_to_block(bytes: &[u8]) -> Block {
@@ -170,20 +138,6 @@ fn bytes_to_chunk_lists(bytes: &Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
         block_bytes.len() % 4 == 0,
         "The block byte list is corrupted"
     );
-    //let mut blocks = Vec::with_capacity(block_bytes.len() / 4);
-    //while block_num * 4 < block_bytes.len() {
-    //    let b1 = block_bytes[block_num * 4 + 0] as u32;
-    //    let b2 = block_bytes[block_num * 4 + 1] as u32;
-    //    let b3 = block_bytes[block_num * 4 + 2] as u32;
-    //    let b4 = block_bytes[block_num * 4 + 3] as u32;
-    //    let mut block: u32 = 0;
-    //    block |= b1 << 24;
-    //    block |= b2 << 16;
-    //    block |= b3 << 08;
-    //    block |= b4 << 00;
-    //    blocks.push(block);
-    //    block_num += 1;
-    //}
     let blocks = block_bytes
         .chunks(4)
         .map(|bits| bytes_to_block(bits))
