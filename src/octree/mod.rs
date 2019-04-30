@@ -8,6 +8,7 @@ pub mod octant;
 pub mod octant_dimensions;
 pub mod octant_face;
 pub mod octree_data;
+//mod type_int_octree;
 
 use octant::Octant;
 use octant_dimensions::OctantDimensions;

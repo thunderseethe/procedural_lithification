@@ -36,6 +36,7 @@ serde_derive = "1.0"
 shred = { version = "0.7" }
 tokio = "0.1.15"
 toolshed = "0.8.0"
+typenum = "1.10.0"
 
 [[bench]]
 name = "chunk"
