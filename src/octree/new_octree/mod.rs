@@ -8,15 +8,17 @@ use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
 use std::borrow::Borrow;
+use std::fmt;
 use std::rc::Rc;
 
 mod ops;
 pub use ops::*;
 
 pub mod descriptors;
-use descriptors::*;
+pub use descriptors::*;
 
 pub mod consts;
+pub use consts::{Octree, Octree8};
 
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
@@ -26,6 +28,20 @@ where
     Node([Rc<O>; 8]),
     Leaf(Rc<O::Element>),
     Empty,
+}
+impl<O> fmt::Debug for LevelData<O>
+where
+    O: OctreeTypes + fmt::Debug,
+    O::Element: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use LevelData::*;
+        match self {
+            Node(nodes) => write!(f, "Node({:?})", nodes),
+            Leaf(elem) => write!(f, "Leaf({:?})", elem),
+            Empty => write!(f, "Empty"),
+        }
+    }
 }
 impl<O> Clone for LevelData<O>
 where
@@ -64,6 +80,18 @@ where
     data: LevelData<O>,
     bottom_left: Point3<O::Field>,
 }
+impl<O> fmt::Debug for OctreeLevel<O>
+where
+    O: OctreeTypes + fmt::Debug,
+    O::Element: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("OctreeLevel")
+            .field("data", &self.data)
+            .field("bottom_left", &self.bottom_left)
+            .finish()
+    }
+}
 impl<O> PartialEq for OctreeLevel<O>
 where
     O: OctreeTypes + PartialEq,
@@ -83,7 +111,7 @@ where
 }
 
 /// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<Rc<E>>.
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum BaseData<E> {
     Leaf(Rc<E>),
     Empty,
@@ -97,7 +125,7 @@ impl<E> Clone for BaseData<E> {
         }
     }
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct OctreeBase<E, N: Scalar> {
     data: BaseData<E>,
     bottom_left: Point3<N>,
@@ -220,6 +248,11 @@ impl<O> OctreeLevel<O>
 where
     O: OctreeTypes + Diameter,
 {
+    /// Convenience method to access diameter from an instance of type
+    pub fn get_diameter(&self) -> usize {
+        Self::diameter()
+    }
+
     pub fn root_point(&self) -> &<Self as HasPosition>::Position {
         &self.bottom_left
     }
@@ -266,5 +299,33 @@ where
             || pos.y < self.bottom_left.y
             || pos.z > self.bottom_left.z + diameter
             || pos.z < self.bottom_left.z
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn octree_new_constructs_expected_tree() {
+        use typenum::*;
+        let octree: OctreeLevel<
+            OctreeLevel<
+                OctreeLevel<
+                    OctreeLevel<
+                        OctreeLevel<OctreeLevel<OctreeLevel<OctreeLevel<OctreeBase<u32, u8>>>>>,
+                    >,
+                >,
+            >,
+        > = Octree::<u32, u8, U256>::new(LevelData::Empty, Point3::origin());
+
+        assert_eq!(octree.get_diameter(), 256);
+        assert_eq!(
+            octree,
+            OctreeLevel {
+                data: LevelData::Empty,
+                bottom_left: Point3::origin(),
+            }
+        );
     }
 }

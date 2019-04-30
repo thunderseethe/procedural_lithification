@@ -1,9 +1,9 @@
 extern crate typenum;
 
 use crate::octree::new_octree::*;
-use typenum::{Bit, PowerOfTwo, UInt, UTerm, Unsigned};
+use typenum::{Bit, PowerOfTwo, Shright, UInt, UTerm, Unsigned, B1, U256};
 
-trait ToOctree<E, N> {
+pub trait ToOctree<E, N> {
     type Octree: OctreeTypes;
 }
 
@@ -17,4 +17,5 @@ where
     type Octree = OctreeLevel<<U as ToOctree<E, N>>::Octree>;
 }
 
-type Octree<E, N, Diameter> = <Diameter as ToOctree<E, N>>::Octree;
+pub type Octree<E, N, Diameter> = <Shright<Diameter, B1> as ToOctree<E, N>>::Octree;
+pub type Octree8<E, N> = Octree<E, N, U256>;

@@ -78,7 +78,7 @@ impl<'a> Mesher<'a> {
         Mesher {
             octree,
             offset: Vector3::new(p.x, p.y, p.z),
-            size: octree.bounds().diameter,
+            size: octree.bounds().diameter() as usize,
         }
     }
 
