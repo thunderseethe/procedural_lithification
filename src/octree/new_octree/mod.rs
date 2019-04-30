@@ -15,6 +15,8 @@ pub use ops::*;
 pub mod descriptors;
 use descriptors::*;
 
+pub mod consts;
+
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
 where
@@ -170,21 +172,20 @@ impl<E, N: Scalar> HasData for OctreeBase<E, N> {
     }
 }
 
-use std::ops::*;
 impl<O> OctreeLevel<O>
 where
     O: Diameter + OctreeTypes,
 {
     fn get_octant_index<P>(&self, pos: P) -> usize
     where
-        P: Borrow<Point3<<Self as FieldType>::Field>>,
+        P: Borrow<<Self as HasPosition>::Position>,
     {
         self.get_octant(pos).to_usize().unwrap()
     }
 
     fn get_octant<P>(&self, pos_ref: P) -> Octant
     where
-        P: Borrow<Point3<<Self as FieldType>::Field>>,
+        P: Borrow<<Self as HasPosition>::Position>,
     {
         use crate::octree::octant::Octant::*;
         let pos = pos_ref.borrow();
@@ -213,35 +214,35 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         }
     }
 }
-impl<O> OctreeLevel<O>
-where
-    O: Insert + New + Diameter + HasData,
-    <O as HasData>::Data: PartialEq,
-{
-    fn create_sub_nodes<P>(
-        &self,
-        pos: P,
-        elem: Rc<<Self as ElementType>::Element>,
-        default: O::Data,
-    ) -> Self
-    where
-        P: Borrow<Point3<<Self as FieldType>::Field>>,
-    {
-        use crate::octree::octant::OctantIter;
-        use LevelData::Node;
-        let modified_octant = self.get_octant(pos.borrow());
-        let octree_nodes: [Rc<O>; 8] = array_init::from_iter(OctantIter::default().map(|octant| {
-            let data = default.clone();
-            let sub_bottom_left = octant.sub_octant_bottom_left(self.bottom_left, O::diameter());
-            let octree = O::new(data, sub_bottom_left);
-            let octree = if modified_octant == octant {
-                octree.insert(pos.borrow(), elem.clone())
-            } else {
-                octree
-            };
-            Rc::new(octree)
-        }))
-        .expect("Failed to construct array from iterator");
-        self.with_data(Node(octree_nodes)).compress_nodes()
-    }
-}
+//impl<O> OctreeLevel<O>
+//where
+//    O: Insert + New + Diameter + HasData,
+//    <O as HasData>::Data: PartialEq,
+//{
+//    fn create_sub_nodes<P>(
+//        &self,
+//        pos: P,
+//        elem: Rc<<Self as ElementType>::Element>,
+//        default: O::Data,
+//    ) -> Self
+//    where
+//        P: Borrow<Point3<<Self as FieldType>::Field>>,
+//    {
+//        use crate::octree::octant::OctantIter;
+//        use LevelData::Node;
+//        let modified_octant = self.get_octant(pos.borrow());
+//        let octree_nodes: [Rc<O>; 8] = array_init::from_iter(OctantIter::default().map(|octant| {
+//            let data = default.clone();
+//            let sub_bottom_left = octant.sub_octant_bottom_left(self.bottom_left, O::diameter());
+//            let octree = O::new(data, sub_bottom_left);
+//            let octree = if modified_octant == octant {
+//                octree.insert(pos.borrow(), elem.clone())
+//            } else {
+//                octree
+//            };
+//            Rc::new(octree)
+//        }))
+//        .expect("Failed to construct array from iterator");
+//        self.with_data(Node(octree_nodes)).compress_nodes()
+//    }
+//}

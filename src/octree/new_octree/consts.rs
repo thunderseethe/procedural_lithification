@@ -1,6 +1,6 @@
 extern crate typenum;
 
-use crate::octree::type_int_octree::*;
+use crate::octree::new_octree::*;
 use typenum::{Bit, PowerOfTwo, UInt, UTerm, Unsigned};
 
 trait ToOctree<E, N> {

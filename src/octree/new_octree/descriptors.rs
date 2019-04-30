@@ -1,6 +1,5 @@
 /// Contains traits that describe properties of an Octree.
 use super::*;
-use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::Num;
 use std::ops::{Shl, Shr};
 
@@ -30,7 +29,7 @@ impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
 pub trait OctreeTypes: ElementType + FieldType {}
 impl<T> OctreeTypes for T where T: ElementType + FieldType {}
 
-/// A composite trait desciribing a numerical type that can be used for the coordinates of an Octree.
+/// Composite trait desciribing a numerical type that can be used for the coordinates of an Octree.
 pub trait Number:
     Scalar + Num + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
 {
@@ -40,6 +39,7 @@ impl<T> Number for T where
 {
 }
 
+/// Trait to unify our BaseData and LevelData empty nodes.
 pub trait Empty {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
@@ -72,6 +72,7 @@ impl<E> Empty for BaseData<E> {
     }
 }
 
+/// Trait to unify our BaseData and LevelData leaf nodes.
 pub trait Leaf<T> {
     fn leaf(value: T) -> Self;
     fn is_leaf(&self) -> bool;

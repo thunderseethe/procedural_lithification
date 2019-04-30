@@ -4,12 +4,11 @@ use num_traits::FromPrimitive;
 use rayon::{iter::plumbing::*, prelude::*};
 use std::{borrow::Borrow, collections::VecDeque, fmt, sync::Arc};
 
-pub mod consts;
+pub mod new_octree;
 pub mod octant;
 pub mod octant_dimensions;
 pub mod octant_face;
 pub mod octree_data;
-pub mod new_octree;
 
 use octant::Octant;
 use octant_dimensions::OctantDimensions;
@@ -237,12 +236,12 @@ impl<E: PartialEq> Octree<E> {
         }
     }
 
-    pub fn mut_children<'a>(&'a mut self) -> &'a mut [Arc<Octree<E>>; 8] {
-        match self.data {
-            Node(ref mut nodes) => nodes,
-            _ => panic!("Unexpected mut_children() on Leaf or Empty data"),
-        }
-    }
+    //pub fn mut_children<'a>(&'a mut self) -> &'a mut [Arc<Octree<E>>; 8] {
+    //    match self.data {
+    //        Node(ref mut nodes) => nodes,
+    //        _ => panic!("Unexpected mut_children() on Leaf or Empty data"),
+    //    }
+    //}
 
     pub fn delete<P>(&self, pos: P) -> Self
     where
