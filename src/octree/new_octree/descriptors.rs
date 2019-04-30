@@ -1,8 +1,8 @@
 /// Contains traits that describe properties of an Octree.
 use super::*;
-use num_traits::{AsPrimitive, Num};
+use num_traits::Num;
 use std::ops::{Shl, Shr};
-
+use typenum::{Bit, PowerOfTwo, Shleft, UInt, Unsigned, B0, B1, U1};
 // Hello, it's your good pal bottom up recursion. Now with types
 pub trait ElementType {
     type Element;
@@ -78,11 +78,11 @@ pub trait Leaf<T> {
     fn is_leaf(&self) -> bool;
     fn get_leaf(&self) -> &T;
 }
-impl<O> Leaf<Rc<O::Element>> for LevelData<O>
+impl<O> Leaf<Ref<O::Element>> for LevelData<O>
 where
     O: OctreeTypes,
 {
-    fn leaf(value: Rc<O::Element>) -> Self {
+    fn leaf(value: Ref<O::Element>) -> Self {
         LevelData::Leaf(value)
     }
 
@@ -93,15 +93,15 @@ where
         }
     }
 
-    fn get_leaf(&self) -> &Rc<O::Element> {
+    fn get_leaf(&self) -> &Ref<O::Element> {
         match self {
             LevelData::Leaf(ref e) => e,
             _ => panic!("Called get_leaf() on non leaf node."),
         }
     }
 }
-impl<E> Leaf<Rc<E>> for BaseData<E> {
-    fn leaf(value: Rc<E>) -> Self {
+impl<E> Leaf<Ref<E>> for BaseData<E> {
+    fn leaf(value: Ref<E>) -> Self {
         BaseData::Leaf(value)
     }
 
@@ -112,10 +112,92 @@ impl<E> Leaf<Rc<E>> for BaseData<E> {
         }
     }
 
-    fn get_leaf(&self) -> &Rc<E> {
+    fn get_leaf(&self) -> &Ref<E> {
         match self {
             BaseData::Leaf(ref e) => e,
             _ => panic!("Called get_leaf() on non leaf node."),
         }
+    }
+}
+
+pub trait Diameter {
+    type Diameter: Unsigned + Double;
+    fn diameter() -> usize;
+}
+impl<O> Diameter for OctreeLevel<O>
+where
+    O: Diameter + OctreeTypes,
+{
+    type Diameter = <O::Diameter as Double>::Output;
+
+    fn diameter() -> usize {
+        O::diameter() << 1
+    }
+}
+impl<E, N> Diameter for OctreeBase<E, N>
+where
+    N: Number,
+{
+    type Diameter = U1;
+
+    fn diameter() -> usize {
+        1
+    }
+}
+
+/// This a more specific version of ShL<B1>, with the caveat that is enforces it's Output implements Double
+/// Because the Output must also implement Double the trait can be recursed as examplified by the Diameter trait
+pub trait Double: PowerOfTwo {
+    type Output: Unsigned + Double;
+}
+impl<U: Unsigned, B: Bit> Double for UInt<U, B>
+where
+    Self: PowerOfTwo,
+{
+    type Output = UInt<Self, B0>;
+}
+
+pub trait HasData: ElementType {
+    type Data: Clone + Leaf<Ref<Self::Element>> + Empty;
+    fn data(&self) -> &Self::Data;
+}
+impl<O> HasData for OctreeLevel<O>
+where
+    O: OctreeTypes,
+{
+    type Data = LevelData<O>;
+
+    fn data(&self) -> &Self::Data {
+        &self.data
+    }
+}
+impl<E, N: Scalar> HasData for OctreeBase<E, N> {
+    type Data = BaseData<E>;
+
+    fn data(&self) -> &Self::Data {
+        &self.data
+    }
+}
+
+pub trait HasPosition {
+    type Position;
+
+    fn position(&self) -> &Self::Position;
+}
+impl<O> HasPosition for OctreeLevel<O>
+where
+    O: OctreeTypes,
+{
+    type Position = Point3<<Self as FieldType>::Field>;
+
+    fn position(&self) -> &Self::Position {
+        &self.bottom_left
+    }
+}
+impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
+    type Position = Point3<N>;
+
+    fn position(&self) -> &Self::Position {
+        &self.bottom_left
     }
 }

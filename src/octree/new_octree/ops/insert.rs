@@ -2,13 +2,12 @@ use super::New;
 use crate::octree::new_octree::*;
 use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
-use std::rc::Rc;
 
 pub trait Insert: OctreeTypes + CreateSubNodes {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<Point3<Self::Field>>,
-        R: Into<Rc<Self::Element>>;
+        R: Into<Ref<Self::Element>>;
 }
 impl<O> Insert for OctreeLevel<O>
 where
@@ -19,7 +18,7 @@ where
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<Point3<Self::Field>>,
-        R: Into<Rc<Self::Element>>,
+        R: Into<Ref<Self::Element>>,
     {
         if self.outside_bounds(pos.borrow()) {
             panic!("Position out of bounds");
@@ -35,7 +34,7 @@ where
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<Point3<N>>,
-        R: Into<Rc<E>>,
+        R: Into<Ref<E>>,
     {
         OctreeBase::new(BaseData::leaf(elem.into()), pos.borrow().clone())
     }

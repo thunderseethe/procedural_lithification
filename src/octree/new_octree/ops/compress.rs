@@ -19,7 +19,7 @@ where
                     self.with_data(if head.is_empty() {
                         LevelData::empty()
                     } else if head.is_leaf() {
-                        LevelData::leaf(Rc::clone(head.get_leaf()))
+                        LevelData::leaf(Ref::clone(head.get_leaf()))
                     } else {
                         panic!("Attempted to compress Node(..) node which should be impossible.");
                     })

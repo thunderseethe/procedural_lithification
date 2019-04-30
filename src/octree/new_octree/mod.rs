@@ -10,6 +10,7 @@ use num_traits::*;
 use std::borrow::Borrow;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 
 mod ops;
 pub use ops::*;
@@ -20,13 +21,17 @@ pub use descriptors::*;
 pub mod consts;
 pub use consts::{Octree, Octree8};
 
+/// Poor man's higher kinded types.
+/// Used to toggle the implementation between Ref and Arc;
+type Ref<T> = Arc<T>;
+
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
 where
     O: OctreeTypes,
 {
-    Node([Rc<O>; 8]),
-    Leaf(Rc<O::Element>),
+    Node([Ref<O>; 8]),
+    Leaf(Ref<O::Element>),
     Empty,
 }
 impl<O> fmt::Debug for LevelData<O>
@@ -51,7 +56,7 @@ where
         use LevelData::*;
         match self {
             Node(ref nodes) => Node(nodes.clone()),
-            Leaf(e) => Leaf(Rc::clone(e)),
+            Leaf(e) => Leaf(Ref::clone(e)),
             Empty => Empty,
         }
     }
@@ -110,17 +115,17 @@ where
     }
 }
 
-/// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<Rc<E>>.
+/// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<Ref<E>>.
 #[derive(PartialEq, Debug)]
 pub enum BaseData<E> {
-    Leaf(Rc<E>),
+    Leaf(Ref<E>),
     Empty,
 }
 impl<E> Clone for BaseData<E> {
     fn clone(&self) -> Self {
         use BaseData::*;
         match self {
-            Leaf(e) => Leaf(Rc::clone(e)),
+            Leaf(e) => Leaf(Ref::clone(e)),
             Empty => Empty,
         }
     }
@@ -133,71 +138,6 @@ pub struct OctreeBase<E, N: Scalar> {
 impl<E, N: Number> Clone for OctreeBase<E, N> {
     fn clone(&self) -> Self {
         OctreeBase::new(self.data.clone(), self.bottom_left.clone())
-    }
-}
-
-pub trait Diameter {
-    fn diameter() -> usize;
-}
-impl<O> Diameter for OctreeLevel<O>
-where
-    O: Diameter + OctreeTypes,
-{
-    fn diameter() -> usize {
-        O::diameter() << 1
-    }
-}
-impl<E, N> Diameter for OctreeBase<E, N>
-where
-    N: Number,
-{
-    fn diameter() -> usize {
-        1
-    }
-}
-
-pub trait HasPosition {
-    type Position;
-
-    fn position(&self) -> &Self::Position;
-}
-impl<O> HasPosition for OctreeLevel<O>
-where
-    O: OctreeTypes,
-{
-    type Position = Point3<<Self as FieldType>::Field>;
-
-    fn position(&self) -> &Self::Position {
-        &self.bottom_left
-    }
-}
-impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
-    type Position = Point3<N>;
-
-    fn position(&self) -> &Self::Position {
-        &self.bottom_left
-    }
-}
-
-pub trait HasData: ElementType {
-    type Data: Clone + Leaf<Rc<Self::Element>> + Empty;
-    fn data(&self) -> &Self::Data;
-}
-impl<O> HasData for OctreeLevel<O>
-where
-    O: OctreeTypes,
-{
-    type Data = LevelData<O>;
-
-    fn data(&self) -> &Self::Data {
-        &self.data
-    }
-}
-impl<E, N: Scalar> HasData for OctreeBase<E, N> {
-    type Data = BaseData<E>;
-
-    fn data(&self) -> &Self::Data {
-        &self.data
     }
 }
 
@@ -277,7 +217,7 @@ where
     where
         EFn: FnOnce() -> Output,
         LFn: FnOnce(&<Self as ElementType>::Element) -> Output,
-        NFn: FnOnce(&[Rc<O>; 8]) -> Output,
+        NFn: FnOnce(&[Ref<O>; 8]) -> Output,
     {
         use LevelData::*;
         match &self.data {
