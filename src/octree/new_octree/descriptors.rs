@@ -1,6 +1,6 @@
 /// Contains traits that describe properties of an Octree.
 use super::*;
-use num_traits::Num;
+use num_traits::{AsPrimitive, Num};
 use std::ops::{Shl, Shr};
 
 // Hello, it's your good pal bottom up recursion. Now with types
@@ -31,11 +31,11 @@ impl<T> OctreeTypes for T where T: ElementType + FieldType {}
 
 /// Composite trait desciribing a numerical type that can be used for the coordinates of an Octree.
 pub trait Number:
-    Scalar + Num + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
+    Scalar + Num + NumCast + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
 {
 }
 impl<T> Number for T where
-    T: Scalar + Num + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
+    T: Scalar + Num + NumCast + PartialOrd + Shr<Self, Output = Self> + Shl<Self, Output = Self>
 {
 }
 

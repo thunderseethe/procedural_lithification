@@ -1,6 +1,6 @@
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::geometry::Point3;
-use num_traits::FromPrimitive;
+use num_traits::{AsPrimitive, FromPrimitive};
 
 /// Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
@@ -68,23 +68,24 @@ impl Octant {
     pub fn sub_octant_bottom_left<N>(
         &self,
         containing_bottom_left: Point3<N>,
-        sub_octant_diameter: N,
+        sub_octant_diameter: usize,
     ) -> Point3<N>
     where
         N: Number,
     {
+        let diameter = num_traits::NumCast::from(sub_octant_diameter).unwrap();
         let x = if self.is_x_high() {
-            containing_bottom_left.x + sub_octant_diameter
+            containing_bottom_left.x + diameter
         } else {
             containing_bottom_left.x
         };
         let y = if self.is_y_high() {
-            containing_bottom_left.y + sub_octant_diameter
+            containing_bottom_left.y + diameter
         } else {
             containing_bottom_left.y
         };
         let z = if self.is_z_high() {
-            containing_bottom_left.z + sub_octant_diameter
+            containing_bottom_left.z + diameter
         } else {
             containing_bottom_left.z
         };

@@ -4,6 +4,7 @@
 /// This relatively verbose but allows the rust compiler to optimize our Trees recursive methods much better than more traditional unbounded recursion.
 /// A lof of the boilerplat can be alleviated by the use of type aliases.
 use super::octant::Octant;
+use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
 use std::borrow::Borrow;
@@ -107,23 +108,23 @@ impl<E, N: Number> Clone for OctreeBase<E, N> {
     }
 }
 
-pub trait Diameter: FieldType {
-    fn diameter() -> Self::Field;
+pub trait Diameter {
+    fn diameter() -> usize;
 }
 impl<O> Diameter for OctreeLevel<O>
 where
     O: Diameter + OctreeTypes,
 {
-    fn diameter() -> Self::Field {
-        O::diameter() << Self::Field::one()
+    fn diameter() -> usize {
+        O::diameter() << 1
     }
 }
 impl<E, N> Diameter for OctreeBase<E, N>
 where
     N: Number,
 {
-    fn diameter() -> N {
-        N::one()
+    fn diameter() -> usize {
+        1
     }
 }
 
@@ -189,7 +190,7 @@ where
     {
         use crate::octree::octant::Octant::*;
         let pos = pos_ref.borrow();
-        let r = Self::diameter() >> <Self as FieldType>::Field::one();
+        let r = num_traits::NumCast::from(Self::diameter() >> 1).unwrap();
         match (
             pos.x >= self.bottom_left.x + r,
             pos.y >= self.bottom_left.y + r,
@@ -214,35 +215,56 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         }
     }
 }
-//impl<O> OctreeLevel<O>
-//where
-//    O: Insert + New + Diameter + HasData,
-//    <O as HasData>::Data: PartialEq,
-//{
-//    fn create_sub_nodes<P>(
-//        &self,
-//        pos: P,
-//        elem: Rc<<Self as ElementType>::Element>,
-//        default: O::Data,
-//    ) -> Self
-//    where
-//        P: Borrow<Point3<<Self as FieldType>::Field>>,
-//    {
-//        use crate::octree::octant::OctantIter;
-//        use LevelData::Node;
-//        let modified_octant = self.get_octant(pos.borrow());
-//        let octree_nodes: [Rc<O>; 8] = array_init::from_iter(OctantIter::default().map(|octant| {
-//            let data = default.clone();
-//            let sub_bottom_left = octant.sub_octant_bottom_left(self.bottom_left, O::diameter());
-//            let octree = O::new(data, sub_bottom_left);
-//            let octree = if modified_octant == octant {
-//                octree.insert(pos.borrow(), elem.clone())
-//            } else {
-//                octree
-//            };
-//            Rc::new(octree)
-//        }))
-//        .expect("Failed to construct array from iterator");
-//        self.with_data(Node(octree_nodes)).compress_nodes()
-//    }
-//}
+
+impl<O> OctreeLevel<O>
+where
+    O: OctreeTypes + Diameter,
+{
+    pub fn root_point(&self) -> &<Self as HasPosition>::Position {
+        &self.bottom_left
+    }
+
+    pub fn data(&self) -> &<Self as HasData>::Data {
+        &self.data
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub fn is_node(&self) -> bool {
+        use LevelData::*;
+        match self.data {
+            Node(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
+    where
+        EFn: FnOnce() -> Output,
+        LFn: FnOnce(&<Self as ElementType>::Element) -> Output,
+        NFn: FnOnce(&[Rc<O>; 8]) -> Output,
+    {
+        use LevelData::*;
+        match &self.data {
+            Empty => empty_fn(),
+            Leaf(elem) => leaf_fn(elem.as_ref()),
+            Node(ref nodes) => node_fn(nodes),
+        }
+    }
+
+    fn outside_bounds<P>(&self, pos_ref: P) -> bool
+    where
+        P: Borrow<<Self as HasPosition>::Position>,
+    {
+        let pos = pos_ref.borrow();
+        let diameter = num_traits::NumCast::from(<Self as Diameter>::diameter()).unwrap();
+        pos.x > self.bottom_left.x + diameter
+            || pos.x < self.bottom_left.x
+            || pos.y > self.bottom_left.y + diameter
+            || pos.y < self.bottom_left.y
+            || pos.z > self.bottom_left.z + diameter
+            || pos.z < self.bottom_left.z
+    }
+}

@@ -4,7 +4,7 @@ use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
 use std::rc::Rc;
 
-pub trait Insert: OctreeTypes {
+pub trait Insert: OctreeTypes + CreateSubNodes {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<Point3<Self::Field>>,
@@ -12,7 +12,7 @@ pub trait Insert: OctreeTypes {
 }
 impl<O> Insert for OctreeLevel<O>
 where
-    O: Insert + New + Diameter + HasData + CreateSubNodes,
+    O: Insert + New + Diameter + HasData,
     <O as HasData>::Data: PartialEq,
     Self::Element: PartialEq,
 {
@@ -21,7 +21,11 @@ where
         P: Borrow<Point3<Self::Field>>,
         R: Into<Rc<Self::Element>>,
     {
-        self.place(pos, Some(elem.into()))
+        if self.outside_bounds(pos.borrow()) {
+            panic!("Position out of bounds");
+        } else {
+            self.place(pos, Some(elem.into()))
+        }
     }
 }
 impl<E, N> Insert for OctreeBase<E, N>

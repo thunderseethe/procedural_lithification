@@ -18,6 +18,23 @@ pub trait CreateSubNodes: OctreeTypes {
     where
         P: Borrow<Point3<Self::Field>>;
 }
+impl<E, N: Number> CreateSubNodes for OctreeBase<E, N> {
+    type SubData = ();
+    fn create_sub_nodes<P>(&self, pos: P, elem: Option<Rc<Self::Element>>, default: ()) -> Self
+    where
+        P: Borrow<Point3<Self::Field>>,
+    {
+        (*self).clone()
+    }
+
+    fn place<P>(&self, _pos: P, data: Option<Rc<Self::Element>>) -> Self {
+        use crate::octree::new_octree::BaseData::*;
+        OctreeBase {
+            data: data.map(Leaf).unwrap_or(Empty),
+            ..(*self).clone()
+        }
+    }
+}
 
 impl<O> CreateSubNodes for OctreeLevel<O>
 where

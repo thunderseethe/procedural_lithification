@@ -205,9 +205,9 @@ impl<E: PartialEq> Octree<E> {
     pub fn data<'a>(&'a self) -> &'a OctreeData<E> {
         &self.data
     }
-    pub fn set_data(&mut self, data: OctreeData<E>) {
-        self.data = data;
-    }
+    //pub fn set_data(&mut self, data: OctreeData<E>) {
+    //    self.data = data;
+    //}
 
     pub fn is_empty(&self) -> bool {
         match self.data {
