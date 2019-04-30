@@ -4,7 +4,7 @@ extern crate cubes_lib;
 
 use amethyst::core::nalgebra::Point3;
 use criterion::{Criterion, ParameterizedBenchmark};
-use cubes_lib::octree::type_int_octree::*;
+use cubes_lib::octree::new_octree::*;
 use cubes_lib::octree::Octree;
 use rand::random;
 

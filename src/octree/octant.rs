@@ -16,7 +16,7 @@ pub enum Octant {
     LowLowLow = 0,
 }
 use self::Octant::*;
-use crate::octree::type_int_octree::Number;
+use crate::octree::new_octree::descriptors::Number;
 
 impl Octant {
     fn is_x_high(&self) -> bool {
