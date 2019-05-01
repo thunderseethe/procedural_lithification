@@ -4,6 +4,7 @@ mod create_sub_nodes;
 mod delete;
 mod get;
 mod insert;
+pub mod iter;
 mod new;
 
 pub use compress::Compress;
@@ -12,3 +13,4 @@ pub use delete::Delete;
 pub use get::Get;
 pub use insert::Insert;
 pub use new::New;
+

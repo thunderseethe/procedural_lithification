@@ -64,22 +64,22 @@ where
     type SystemData = (
         Read<'a, Time>,
         WriteStorage<'a, Transform>,
-        WriteStorage<'a, RayComponent<f32>>,
+        //WriteStorage<'a, RayComponent<f32>>,
         Read<'a, InputHandler<A, B>>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (time, mut transform, mut ray, input, tag): Self::SystemData) {
+    fn run(&mut self, (time, mut transform, /*mut ray,*/ input, tag): Self::SystemData) {
         let x = get_input_axis_simple(&self.right_input_axis, &input);
         let y = get_input_axis_simple(&self.up_input_axis, &input);
         let z = get_input_axis_simple(&self.forward_input_axis, &input);
 
         if let Some(direction) = Unit::try_new(Vector3::new(x, y, z), 1.0e-6) {
-            for (transform, ray, _) in (&mut transform, &mut ray, &tag).join() {
+            for (transform, /*ray,*/ _) in (&mut transform, /*&mut ray,*/ &tag).join() {
                 let translation = transform.translation();
                 let origin = Point::new(translation.x, translation.y, translation.z);
-                let dir = ncollide3d::math::Vector::new(direction.x, direction.y, direction.z);
-                *ray = RayComponent::new(Ray::new(origin, dir));
+                //let dir = ncollide3d::math::Vector::new(direction.x, direction.y, direction.z);
+                //*ray = RayComponent::new(Ray::new(origin, dir));
                 transform.move_along_local(direction, time.delta_seconds() * self.speed);
             }
         }
