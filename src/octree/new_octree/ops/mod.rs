@@ -8,6 +8,7 @@ mod new;
 
 pub use compress::Compress;
 pub(in crate::octree::new_octree) use create_sub_nodes::CreateSubNodes;
+pub use delete::Delete;
 pub use get::Get;
 pub use insert::Insert;
 pub use new::New;

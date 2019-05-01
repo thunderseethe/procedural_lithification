@@ -130,6 +130,15 @@ impl<E> Clone for BaseData<E> {
         }
     }
 }
+impl<E> BaseData<E> {
+    fn as_option(&self) -> Option<&Ref<E>> {
+        use BaseData::*;
+        match self {
+            Leaf(ref elem) => Some(elem),
+            Empty => None,
+        }
+    }
+}
 #[derive(PartialEq, Debug)]
 pub struct OctreeBase<E, N: Scalar> {
     data: BaseData<E>,
@@ -175,15 +184,6 @@ where
         }
     }
 }
-impl<O: OctreeTypes> OctreeLevel<O> {
-    fn with_data(&self, data: LevelData<O>) -> Self {
-        OctreeLevel {
-            data: data,
-            ..(*self.clone())
-        }
-    }
-}
-
 impl<O> OctreeLevel<O>
 where
     O: OctreeTypes + Diameter,
@@ -191,6 +191,29 @@ where
     /// Convenience method to access diameter from an instance of type
     pub fn get_diameter(&self) -> usize {
         Self::diameter()
+    }
+
+    fn outside_bounds<P>(&self, pos_ref: P) -> bool
+    where
+        P: Borrow<<Self as HasPosition>::Position>,
+    {
+        let pos = pos_ref.borrow();
+        let diameter: usize = <Self as Diameter>::diameter();
+        pos.x.as_() > self.bottom_left.x.as_() + diameter
+            || pos.x < self.bottom_left.x
+            || pos.y.as_() > self.bottom_left.y.as_() + diameter
+            || pos.y < self.bottom_left.y
+            || pos.z.as_() > self.bottom_left.z.as_() + diameter
+            || pos.z < self.bottom_left.z
+    }
+}
+// This is the least restrictive impl for our OctreeLevel so most of our helper methods live here
+impl<O: OctreeTypes> OctreeLevel<O> {
+    fn with_data(&self, data: <Self as HasData>::Data) -> Self {
+        OctreeLevel {
+            data: data,
+            ..(*self.clone())
+        }
     }
 
     pub fn root_point(&self) -> &<Self as HasPosition>::Position {
@@ -226,19 +249,13 @@ where
             Node(ref nodes) => node_fn(nodes),
         }
     }
-
-    fn outside_bounds<P>(&self, pos_ref: P) -> bool
-    where
-        P: Borrow<<Self as HasPosition>::Position>,
-    {
-        let pos = pos_ref.borrow();
-        let diameter: usize = <Self as Diameter>::diameter();
-        pos.x.as_() > self.bottom_left.x.as_() + diameter
-            || pos.x < self.bottom_left.x
-            || pos.y.as_() > self.bottom_left.y.as_() + diameter
-            || pos.y < self.bottom_left.y
-            || pos.z.as_() > self.bottom_left.z.as_() + diameter
-            || pos.z < self.bottom_left.z
+}
+impl<E, N: Number> OctreeBase<E, N> {
+    fn with_data(&self, data: <Self as HasData>::Data) -> Self {
+        OctreeBase {
+            data: data,
+            ..(*self).clone()
+        }
     }
 }
 
@@ -318,7 +335,7 @@ mod test {
     #[test]
     fn octree_deletes_expected_element() {
         let p = Point3::new(4, 1, 1);
-        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+        let octree: Octree8<i32, u8> = OctreeLevel::new(LevelData::Empty, Point3::origin())
             .insert(Point3::new(1, 1, 1), 1234)
             .insert(Point3::new(1, 1, 2), 4567)
             .insert(&p, 7890);

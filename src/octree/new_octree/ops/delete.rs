@@ -31,3 +31,12 @@ where
         }
     }
 }
+
+impl<E, N: Number> Delete for OctreeBase<E, N> {
+    fn delete<P>(&self, _pos: P) -> Self
+    where
+        P: Borrow<Point3<N>>,
+    {
+        self.with_data(BaseData::Empty)
+    }
+}
