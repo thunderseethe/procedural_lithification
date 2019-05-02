@@ -21,8 +21,14 @@ impl<E, N: Number> FieldType for OctreeBase<E, N> {
 impl<O: OctreeTypes> ElementType for OctreeLevel<O> {
     type Element = O::Element;
 }
+impl<'a, O: OctreeTypes> ElementType for &'a OctreeLevel<O> {
+    type Element = <OctreeLevel<O> as ElementType>::Element;
+}
 impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
     type Field = O::Field;
+}
+impl<'a, O: OctreeTypes> FieldType for &'a OctreeLevel<O> {
+    type Field = <O as FieldType>::Field;
 }
 
 // Convenience wrapper to avoid busting my + key
@@ -146,6 +152,16 @@ where
         O::diameter() << 1
     }
 }
+impl<'a, O> Diameter for &'a OctreeLevel<O>
+where
+    O: Diameter + OctreeTypes,
+{
+    type Diameter = <OctreeLevel<O> as Diameter>::Diameter;
+
+    fn diameter() -> usize {
+        OctreeLevel::<O>::diameter()
+    }
+}
 impl<E, N> Diameter for OctreeBase<E, N>
 where
     N: Number,
@@ -154,6 +170,16 @@ where
 
     fn diameter() -> usize {
         1
+    }
+}
+impl<'a, E, N> Diameter for &'a OctreeBase<E, N>
+where
+    N: Number,
+{
+    type Diameter = <OctreeBase<E, N> as Diameter>::Diameter;
+
+    fn diameter() -> usize {
+        OctreeBase::<E, N>::diameter()
     }
 }
 

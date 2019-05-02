@@ -2,78 +2,83 @@ use crate::octree::new_octree::*;
 
 impl<'a, O> IntoIterator for &'a OctreeLevel<O>
 where
-    O: OctreeTypes + IntoIterator<Item = Self::Item>,
+    O: OctreeTypes + Diameter,
+    &'a O: IntoIterator<Item = Octant<O::Element, O::Field>>,
 {
-    type Item = Octant<'a, <Self as ElementType>::Element, <Self as FieldType>::Field>;
-    type IntoIter = OctantIter<impl Iterator<Item = Self::Item>>;
+    type Item = <&'a O as IntoIterator>::Item;
+    type IntoIter = OctantIter<
+        Octant<O::Element, O::Field>,
+        std::slice::Iter<'a, Rc<O>>,
+        <&'a O as IntoIterator>::IntoIter,
+        fn(&'a Rc<O>) -> <&'a O as IntoIterator>::IntoIter,
+    >;
 
     fn into_iter(self) -> Self::IntoIter {
         use LevelData::*;
-        match self {
-            Empty => OctantIter {
-                iterator: None.into_iter(),
-            },
-            Leaf(elem) => OctantIter {
-                iterator: Some(Octant::new(
-                    elem.as_ref(),
-                    &self.bottom_left,
+        match &self.data {
+            Empty => OctantIter::Leaf(None.into_iter()),
+            Leaf(ref elem) => OctantIter::Leaf(
+                Some(Octant::new(
+                    Ref::clone(&elem),
+                    self.bottom_left.clone(),
                     Self::diameter(),
                 ))
                 .into_iter(),
-            },
-            Node(nodes) => OctantIter {
-                iterator: nodes.iter().flat_map(|node| node.as_ref().into_iter()),
-            },
+            ),
+            Node(ref nodes) => OctantIter::Nodes(nodes.iter().flat_map(
+                (|node| node.as_ref().into_iter())
+                    as fn(&'a Rc<O>) -> <&'a O as IntoIterator>::IntoIter,
+            )),
         }
     }
 }
-struct OctantIter<I> {
-    iterator: I,
+
+pub enum OctantIter<E, I, U, F>
+where
+    U: IntoIterator,
+{
+    Leaf(std::option::IntoIter<E>),
+    Nodes(std::iter::FlatMap<I, U, F>),
 }
-impl<I> Iterator for OctantIter<I>
+impl<E, I, U, F> Iterator for OctantIter<E, I, U, F>
 where
     I: Iterator,
+    U: IntoIterator<Item = E>,
+    F: FnMut(<I as Iterator>::Item) -> U,
 {
-    type Item = <I as Iterator>::Item;
+    type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iterator.next()
+        match self {
+            OctantIter::Leaf(iter) => iter.next(),
+            OctantIter::Nodes(iter) => iter.next(),
+        }
     }
 }
 
-impl<'a, E, N: Number> IntoIterator for &'a OctreeBase<E, N> {
-    type Item = Octant<'a, E, N>;
-    type IntoIter = <Option<Octant<'a, E, N>> as IntoIterator>::IntoIter;
+impl<'a, E, N: Number> IntoIterator for OctreeBase<E, N> {
+    type Item = Octant<E, N>;
+    type IntoIter = std::option::IntoIter<Octant<E, N>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.data
             .as_option()
-            .map(|elem| Octant::new(elem.as_ref(), &self.bottom_left, Self::diameter()))
+            .map(|elem| Octant::new(Ref::clone(elem), self.bottom_left.clone(), Self::diameter()))
             .into_iter()
     }
 }
 
-struct Octant<'a, E, N: Scalar> {
-    data: &'a E,
-    bottom_left_front: &'a Point3<N>,
+pub struct Octant<E, N: Scalar> {
+    data: Ref<E>,
+    bottom_left_front: Point3<N>,
     diameter: usize,
 }
-impl<'a, E, N: Scalar> Octant<'a, E, N> {
-    fn new(data: &'a E, bottom_left_front: &'a Point3<N>, diameter: usize) {
+impl<E, N: Scalar> Octant<E, N> {
+    fn new(data: Ref<E>, bottom_left_front: Point3<N>, diameter: usize) -> Self {
         Octant {
+            data,
             bottom_left_front,
             diameter,
         }
-    }
-}
-
-struct EmptyIterator<T> {
-    _marker: std::marker::PhantomData<T>,
-}
-impl<T> Iterator for EmptyIterator<T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        None
     }
 }

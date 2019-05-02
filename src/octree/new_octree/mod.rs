@@ -344,4 +344,15 @@ mod test {
         let octree = octree.delete(&p);
         assert_eq!(octree.get(&p), None);
     }
+
+    #[test]
+    fn octree_iterator_length_is_correct() {
+        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(Point3::new(2, 2, 2), 1234)
+            .insert(Point3::new(1, 1, 2), 4567)
+            .insert(Point3::new(2, 1, 1), 7890);
+
+        let oct_ref = &octree;
+        assert_eq!(oct_ref.into_iter().count(), 3);
+    }
 }

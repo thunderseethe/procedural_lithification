@@ -1,5 +1,5 @@
 use super::block::Block;
-use crate::octree::{octant_face::OctantFace, *};
+use crate::octree::{octant_face::OctantFace, Octree};
 use crate::volume::Cuboid;
 use alga::general::SubsetOf;
 use amethyst::core::nalgebra as na;
@@ -386,71 +386,71 @@ fn as_option(pred: bool) -> Option<()> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{Block, Mesher, OctantFace, Point3, Quad};
     use crate::octree::Octree;
     use galvanic_assert::matchers::collection::*;
 
-    #[test]
-    fn full_octree_meshed_with_6_quads() {
-        let height = 5;
-        let octree: Octree<Block> = Octree::new(Point3::origin(), Some(1), height);
-        let mesher = Mesher::new(&octree);
-        let size = i32::pow(2, height);
+    //#[test]
+    //fn full_octree_meshed_with_6_quads() {
+    //    let height = 5;
+    //    let octree: Octree<Block> = Octree::new(Point3::origin(), Some(1), height);
+    //    let mesher = Mesher::new(&octree);
+    //    let size = i32::pow(2, height);
 
-        let quads = mesher.generate_quads_array();
-        assert_that!(
-            &quads,
-            contains_in_any_order(vec![
-                Quad::new(
-                    Point3::new(0, 0, 0),
-                    Point3::new(0, 0, size),
-                    Point3::new(0, size, 0),
-                    Point3::new(0, size, size),
-                    1,
-                    OctantFace::Left
-                ),
-                Quad::new(
-                    Point3::new(size, 0, 0),
-                    Point3::new(size, 0, size),
-                    Point3::new(size, size, 0),
-                    Point3::new(size, size, size),
-                    1,
-                    OctantFace::Right
-                ),
-                Quad::new(
-                    Point3::new(0, 0, 0),
-                    Point3::new(size, 0, 0),
-                    Point3::new(0, 0, size),
-                    Point3::new(size, 0, size),
-                    1,
-                    OctantFace::Down
-                ),
-                Quad::new(
-                    Point3::new(0, size, 0),
-                    Point3::new(size, size, 0),
-                    Point3::new(0, size, size),
-                    Point3::new(size, size, size),
-                    1,
-                    OctantFace::Up
-                ),
-                Quad::new(
-                    Point3::new(0, 0, 0),
-                    Point3::new(0, size, 0),
-                    Point3::new(size, 0, 0),
-                    Point3::new(size, size, 0),
-                    1,
-                    OctantFace::Front
-                ),
-                Quad::new(
-                    Point3::new(0, 0, size),
-                    Point3::new(0, size, size),
-                    Point3::new(size, 0, size),
-                    Point3::new(size, size, size),
-                    1,
-                    OctantFace::Back
-                ),
-            ])
-        );
-    }
+    //    let quads = mesher.generate_quads_array();
+    //    assert_that!(
+    //        &quads,
+    //        contains_in_any_order(vec![
+    //            Quad::new(
+    //                Point3::new(0, 0, 0),
+    //                Point3::new(0, 0, size),
+    //                Point3::new(0, size, 0),
+    //                Point3::new(0, size, size),
+    //                1,
+    //                OctantFace::Left
+    //            ),
+    //            Quad::new(
+    //                Point3::new(size, 0, 0),
+    //                Point3::new(size, 0, size),
+    //                Point3::new(size, size, 0),
+    //                Point3::new(size, size, size),
+    //                1,
+    //                OctantFace::Right
+    //            ),
+    //            Quad::new(
+    //                Point3::new(0, 0, 0),
+    //                Point3::new(size, 0, 0),
+    //                Point3::new(0, 0, size),
+    //                Point3::new(size, 0, size),
+    //                1,
+    //                OctantFace::Down
+    //            ),
+    //            Quad::new(
+    //                Point3::new(0, size, 0),
+    //                Point3::new(size, size, 0),
+    //                Point3::new(0, size, size),
+    //                Point3::new(size, size, size),
+    //                1,
+    //                OctantFace::Up
+    //            ),
+    //            Quad::new(
+    //                Point3::new(0, 0, 0),
+    //                Point3::new(0, size, 0),
+    //                Point3::new(size, 0, 0),
+    //                Point3::new(size, size, 0),
+    //                1,
+    //                OctantFace::Front
+    //            ),
+    //            Quad::new(
+    //                Point3::new(0, 0, size),
+    //                Point3::new(0, size, size),
+    //                Point3::new(size, 0, size),
+    //                Point3::new(size, size, size),
+    //                1,
+    //                OctantFace::Back
+    //            ),
+    //        ])
+    //    );
+    //}
 
 }
