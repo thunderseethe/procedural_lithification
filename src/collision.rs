@@ -18,23 +18,13 @@ const TERRAIN_GROUP: usize = 1;
 const ENTITY_GROUP: usize = 2;
 const PLAYER_GROUP: usize = 3;
 
-pub struct RayComponent<N: alga::general::RealField>(Ray<N>);
-impl<N: alga::general::RealField> RayComponent<N> {
-    pub fn new(ray: Ray<N>) -> Self {
-        RayComponent(ray)
-    }
-}
-impl<N: alga::general::RealField> Component for RayComponent<N> {
-    type Storage = VecStorage<Self>;
-}
-
 #[derive(Debug)]
-enum CollisionDetectionError {
+pub enum CollisionDetectionError {
     ChunkAlreadyPresent,
 }
 
 // better name
-struct CollisionDetection {
+pub struct CollisionDetection {
     world: CollisionWorld<f32, ShapeHandle<f32>>,
     player_handle: CollisionObjectHandle,
     terrain_handles: HashMap<Point3<i32>, Vec<CollisionObjectHandle>>,

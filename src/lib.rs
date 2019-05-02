@@ -21,7 +21,7 @@ extern crate tokio;
 extern crate toolshed;
 
 pub mod chunk;
-mod collision;
+pub mod collision;
 pub mod dimension;
 pub mod octree;
 pub mod systems;

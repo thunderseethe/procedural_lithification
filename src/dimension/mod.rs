@@ -47,7 +47,7 @@ unsafe impl Sync for Dimension {}
 impl Default for Dimension {
     fn default() -> Self {
         Dimension {
-            terrain: Terrain::default().with_seed(100000024),
+            terrain: Terrain::default(),
             storage: DimensionStorage::new(),
         }
     }
