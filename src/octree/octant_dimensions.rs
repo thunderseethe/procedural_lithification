@@ -1,5 +1,5 @@
 use super::{
-    octant::{Octant, Octant::*},
+    octant::{OctantId, OctantId::*},
     octant_face::OctantFace,
     Number,
 };
@@ -123,7 +123,7 @@ impl OctantDimensions {
         }
     }
 
-    pub fn get_octant<P>(&self, pos_ref: P) -> Octant
+    pub fn get_octant<P>(&self, pos_ref: P) -> OctantId
     where
         P: Borrow<Point3<Number>>,
     {

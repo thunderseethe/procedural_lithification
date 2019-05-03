@@ -10,7 +10,7 @@ pub mod octant_dimensions;
 pub mod octant_face;
 pub mod octree_data;
 
-use octant::Octant;
+use octant::OctantId;
 use octant_dimensions::OctantDimensions;
 use octant_face::OctantFace;
 use octree_data::{OctreeData, OctreeData::*};
@@ -355,7 +355,7 @@ impl<E: PartialEq> Octree<E> {
 
         let octree_nodes: [Arc<Octree<E>>; 8] = array_init::array_init(|i| {
             let octant =
-                Octant::from_usize(i).expect("Tried to create more than 8 elements in an octree");
+                OctantId::from_usize(i).expect("Tried to create more than 8 elements in an octree");
 
             let data = default.clone();
             let bounds = octant.sub_octant_bounds(&self.bounds);

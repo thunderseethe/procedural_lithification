@@ -67,14 +67,26 @@ impl<'a, E, N: Number> IntoIterator for OctreeBase<E, N> {
             .into_iter()
     }
 }
+impl<'a, E, N: Number> IntoIterator for &'a OctreeBase<E, N> {
+    type Item = Octant<E, N>;
+    type IntoIter = std::option::IntoIter<Octant<E, N>>;
 
+    fn into_iter(self) -> Self::IntoIter {
+        self.data
+            .as_option()
+            .map(|elem| Octant::new(Ref::clone(elem), self.bottom_left.clone(), Self::diameter()))
+            .into_iter()
+    }
+}
+
+#[derive(Hash, PartialEq, Eq, Debug)]
 pub struct Octant<E, N: Scalar> {
     data: Ref<E>,
     bottom_left_front: Point3<N>,
     diameter: usize,
 }
 impl<E, N: Scalar> Octant<E, N> {
-    fn new(data: Ref<E>, bottom_left_front: Point3<N>, diameter: usize) -> Self {
+    pub fn new(data: Ref<E>, bottom_left_front: Point3<N>, diameter: usize) -> Self {
         Octant {
             data,
             bottom_left_front,

@@ -13,4 +13,5 @@ pub use delete::Delete;
 pub use get::Get;
 pub use insert::Insert;
 pub use new::New;
+pub use iter::{Octant, OctantIter};
 

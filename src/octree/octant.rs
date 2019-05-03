@@ -4,7 +4,7 @@ use num_traits::{AsPrimitive, FromPrimitive};
 
 /// Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
-pub enum Octant {
+pub enum OctantId {
     // x, y, z
     HighHighHigh = 7,
     HighHighLow = 6,
@@ -15,10 +15,10 @@ pub enum Octant {
     LowLowHigh = 1,
     LowLowLow = 0,
 }
-use self::Octant::*;
+use self::OctantId::*;
 use crate::octree::new_octree::descriptors::Number;
 
-impl Octant {
+impl OctantId {
     fn is_x_high(&self) -> bool {
         match self {
             HighHighHigh | HighHighLow | HighLowHigh | HighLowLow => true,
@@ -93,24 +93,24 @@ impl Octant {
     }
 
     /// Iterates over all variants of Octant
-    pub fn iter() -> OctantIter {
-        OctantIter::default()
+    pub fn iter() -> OctantIdIter {
+        OctantIdIter::default()
     }
 }
 
-pub struct OctantIter {
+pub struct OctantIdIter {
     indx: u8,
 }
-impl Default for OctantIter {
+impl Default for OctantIdIter {
     fn default() -> Self {
-        OctantIter { indx: 0 }
+        OctantIdIter { indx: 0 }
     }
 }
-impl Iterator for OctantIter {
-    type Item = Octant;
+impl Iterator for OctantIdIter {
+    type Item = OctantId;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let octant = Octant::from_u8(self.indx);
+        let octant = OctantId::from_u8(self.indx);
         self.indx += 1;
         octant
     }

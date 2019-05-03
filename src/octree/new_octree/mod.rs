@@ -3,7 +3,7 @@
 /// For example an Octree of height 3 would have type OctreeLevel<OctreeLevel<OctreeBase<E, N>>>.
 /// This relatively verbose but allows the rust compiler to optimize our Trees recursive methods much better than more traditional unbounded recursion.
 /// A lof of the boilerplat can be alleviated by the use of type aliases.
-use super::octant::Octant;
+use super::octant::OctantId;
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
@@ -161,11 +161,11 @@ where
         self.get_octant(pos).to_usize().unwrap()
     }
 
-    fn get_octant<P>(&self, pos_ref: P) -> Octant
+    fn get_octant<P>(&self, pos_ref: P) -> OctantId
     where
         P: Borrow<<Self as HasPosition>::Position>,
     {
-        use crate::octree::octant::Octant::*;
+        use crate::octree::octant::OctantId::*;
         let pos = pos_ref.borrow();
         let r = num_traits::NumCast::from(Self::diameter() >> 1).unwrap();
         match (
@@ -346,8 +346,18 @@ mod test {
     }
 
     #[test]
+    fn octree_delete_is_idempotent() {
+        let p = Point3::new(1, 1, 1);
+        let octree: Octree8<i32, u8> =
+            Octree8::new(LevelData::Empty, Point3::origin()).insert(&p, 1234);
+
+        let result = octree.delete(&p).delete(&p);
+        assert_eq!(result.get(&p), None);
+    }
+
+    #[test]
     fn octree_iterator_length_is_correct() {
-        let octree: Octree8<i32, u8> = Octree8::new(LevelData::Empty, Point3::origin())
+        let octree: Octree8<i32, u8> = OctreeLevel::new(LevelData::Empty, Point3::origin())
             .insert(Point3::new(2, 2, 2), 1234)
             .insert(Point3::new(1, 1, 2), 4567)
             .insert(Point3::new(2, 1, 1), 7890);
@@ -355,4 +365,45 @@ mod test {
         let oct_ref = &octree;
         assert_eq!(oct_ref.into_iter().count(), 3);
     }
+
+    #[test]
+    fn octree_iterator_contains_correct_elements() {
+        use std::collections::HashSet;
+
+        let octree = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(Point3::new(2, 2, 2), 1)
+            .insert(Point3::new(2, 4, 2), 2)
+            .insert(Point3::new(4, 4, 4), 3)
+            .insert(Point3::new(2, 2, 4), 4);
+
+        let mut expected = HashSet::new();
+        expected.insert(Octant::new(Ref::new(1), Point3::new(2, 2, 2), 1));
+        expected.insert(Octant::new(Ref::new(2), Point3::new(2, 4, 2), 1));
+        expected.insert(Octant::new(Ref::new(3), Point3::new(4, 4, 4), 1));
+        expected.insert(Octant::new(Ref::new(4), Point3::new(2, 2, 4), 1));
+
+        for octant in &octree {
+            assert!(expected.contains(&octant));
+        }
+    }
+
+    #[test]
+    fn octree_insertion_compresses_common_nodes_in_subtree() {
+        let octree = Octree8::new(LevelData::Empty, Point3::origin())
+            .insert(Point3::new(1, 1, 1), 1234)
+            .insert(Point3::new(1, 1, 0), 1234)
+            .insert(Point3::new(1, 0, 1), 1234)
+            .insert(Point3::new(0, 1, 0), 1234)
+            .insert(Point3::new(0, 1, 1), 1234)
+            .insert(Point3::new(1, 0, 0), 1234)
+            .insert(Point3::new(0, 0, 1), 1234)
+            .insert(Point3::new(0, 0, 0), 1234);
+
+        let mut iter = (&octree).into_iter();
+        assert_eq!(
+            iter.next(),
+            Some(Octant::new(Ref::new(1234), Point3::origin(), 2))
+        );
+    }
+
 }
