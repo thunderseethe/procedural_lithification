@@ -96,11 +96,11 @@ pub trait Leaf<T> {
     fn is_leaf(&self) -> bool;
     fn get_leaf(&self) -> &T;
 }
-impl<O> Leaf<Ref<O::Element>> for LevelData<O>
+impl<O> Leaf<ElementOf<O>> for LevelData<O>
 where
     O: OctreeTypes,
 {
-    fn leaf(value: Ref<O::Element>) -> Self {
+    fn leaf(value: ElementOf<O>) -> Self {
         LevelData::Leaf(value)
     }
 
@@ -111,15 +111,15 @@ where
         }
     }
 
-    fn get_leaf(&self) -> &Ref<O::Element> {
+    fn get_leaf(&self) -> &ElementOf<O> {
         match self {
             LevelData::Leaf(ref e) => e,
             _ => panic!("Called get_leaf() on non leaf node."),
         }
     }
 }
-impl<E> Leaf<Ref<E>> for BaseData<E> {
-    fn leaf(value: Ref<E>) -> Self {
+impl<E> Leaf<E> for BaseData<E> {
+    fn leaf(value: E) -> Self {
         BaseData::Leaf(value)
     }
 
@@ -130,7 +130,7 @@ impl<E> Leaf<Ref<E>> for BaseData<E> {
         }
     }
 
-    fn get_leaf(&self) -> &Ref<E> {
+    fn get_leaf(&self) -> &E {
         match self {
             BaseData::Leaf(ref e) => e,
             _ => panic!("Called get_leaf() on non leaf node."),
@@ -196,7 +196,8 @@ where
 }
 
 pub trait HasData: ElementType {
-    type Data: Clone + Leaf<Ref<Self::Element>> + Empty;
+    type Data: Leaf<Self::Element> + Empty;
+
     fn data(&self) -> &Self::Data;
 }
 impl<O> HasData for OctreeLevel<O>

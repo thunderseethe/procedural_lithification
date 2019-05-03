@@ -19,7 +19,7 @@ where
         use crate::octree::new_octree::LevelData::*;
         match self.data {
             Empty => None,
-            Leaf(ref elem) => Some(elem.as_ref()),
+            Leaf(ref elem) => Some(elem),
             Node(ref octants) => {
                 let index: usize = self.get_octant_index(pos.borrow());
                 octants[index].get(pos)
@@ -38,7 +38,7 @@ where
         use crate::octree::new_octree::BaseData::*;
         match self.data {
             Empty => None,
-            Leaf(ref elem) => Some(elem.as_ref()),
+            Leaf(ref elem) => Some(elem),
         }
     }
 }

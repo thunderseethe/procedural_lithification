@@ -3,7 +3,7 @@
 /// For example an Octree of height 3 would have type OctreeLevel<OctreeLevel<OctreeBase<E, N>>>.
 /// This relatively verbose but allows the rust compiler to optimize our Trees recursive methods much better than more traditional unbounded recursion.
 /// A lof of the boilerplat can be alleviated by the use of type aliases.
-use super::octant::OctantId;
+use super::octant::{Octant, OctantId};
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
@@ -23,7 +23,11 @@ pub use consts::{Octree, Octree8};
 
 /// Poor man's higher kinded types.
 /// Used to toggle the implementation between Ref and Arc;
-type Ref<T> = Rc<T>;
+type Ref<T> = Arc<T>;
+
+pub type DataOf<T> = <T as HasData>::Data;
+pub type ElementOf<T> = <T as ElementType>::Element;
+pub type FieldOf<T> = <T as FieldType>::Field;
 
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
@@ -31,13 +35,13 @@ where
     O: OctreeTypes,
 {
     Node([Ref<O>; 8]),
-    Leaf(Ref<O::Element>),
+    Leaf(O::Element),
     Empty,
 }
 impl<O> fmt::Debug for LevelData<O>
 where
     O: OctreeTypes + fmt::Debug,
-    O::Element: fmt::Debug,
+    ElementOf<O>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use LevelData::*;
@@ -51,12 +55,13 @@ where
 impl<O> Clone for LevelData<O>
 where
     O: OctreeTypes,
+    ElementOf<O>: Clone,
 {
     fn clone(&self) -> Self {
         use LevelData::*;
         match self {
             Node(ref nodes) => Node(nodes.clone()),
-            Leaf(e) => Leaf(Ref::clone(e)),
+            Leaf(e) => Leaf(e.clone()),
             Empty => Empty,
         }
     }
@@ -64,7 +69,7 @@ where
 impl<O> PartialEq for LevelData<O>
 where
     O: OctreeTypes + PartialEq,
-    <O as ElementType>::Element: PartialEq,
+    ElementOf<O>: PartialEq,
 {
     fn eq(&self, other: &LevelData<O>) -> bool {
         use LevelData::*;
@@ -88,7 +93,7 @@ where
 impl<O> fmt::Debug for OctreeLevel<O>
 where
     O: OctreeTypes + fmt::Debug,
-    O::Element: fmt::Debug,
+    ElementOf<O>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("OctreeLevel")
@@ -100,7 +105,7 @@ where
 impl<O> PartialEq for OctreeLevel<O>
 where
     O: OctreeTypes + PartialEq,
-    <O as ElementType>::Element: PartialEq,
+    ElementOf<O>: PartialEq,
 {
     fn eq(&self, other: &OctreeLevel<O>) -> bool {
         self.bottom_left.eq(&other.bottom_left) && self.data.eq(&other.data)
@@ -109,33 +114,42 @@ where
 impl<O> Clone for OctreeLevel<O>
 where
     O: OctreeTypes + Clone,
+    ElementOf<O>: Clone,
 {
     fn clone(&self) -> Self {
         OctreeLevel::new(self.data.clone(), self.bottom_left.clone())
     }
 }
 
-/// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<Ref<E>>.
+/// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<E>.
 #[derive(PartialEq, Debug)]
 pub enum BaseData<E> {
-    Leaf(Ref<E>),
+    Leaf(E),
     Empty,
 }
-impl<E> Clone for BaseData<E> {
+impl<E: Clone> Clone for BaseData<E> {
     fn clone(&self) -> Self {
         use BaseData::*;
         match self {
-            Leaf(e) => Leaf(Ref::clone(e)),
+            Leaf(e) => Leaf(e.clone()),
             Empty => Empty,
         }
     }
 }
 impl<E> BaseData<E> {
-    fn as_option(&self) -> Option<&Ref<E>> {
+    fn as_option(&self) -> Option<&E> {
         use BaseData::*;
         match self {
             Leaf(ref elem) => Some(elem),
             Empty => None,
+        }
+    }
+}
+impl<E> Into<Option<E>> for BaseData<E> {
+    fn into(self) -> Option<E> {
+        match self {
+            BaseData::Leaf(elem) => Some(elem),
+            BaseData::Empty => None,
         }
     }
 }
@@ -144,7 +158,7 @@ pub struct OctreeBase<E, N: Scalar> {
     data: BaseData<E>,
     bottom_left: Point3<N>,
 }
-impl<E, N: Number> Clone for OctreeBase<E, N> {
+impl<E: Clone, N: Number> Clone for OctreeBase<E, N> {
     fn clone(&self) -> Self {
         OctreeBase::new(self.data.clone(), self.bottom_left.clone())
     }
@@ -209,7 +223,7 @@ where
 }
 // This is the least restrictive impl for our OctreeLevel so most of our helper methods live here
 impl<O: OctreeTypes> OctreeLevel<O> {
-    fn with_data(&self, data: <Self as HasData>::Data) -> Self {
+    fn with_data(&self, data: DataOf<Self>) -> Self {
         OctreeLevel {
             data: data,
             ..(*self.clone())
@@ -220,7 +234,7 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         &self.bottom_left
     }
 
-    pub fn data(&self) -> &<Self as HasData>::Data {
+    pub fn data(&self) -> &DataOf<Self> {
         &self.data
     }
 
@@ -245,17 +259,20 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         use LevelData::*;
         match &self.data {
             Empty => empty_fn(),
-            Leaf(elem) => leaf_fn(elem.as_ref()),
+            Leaf(elem) => leaf_fn(&elem),
             Node(ref nodes) => node_fn(nodes),
         }
     }
 }
-impl<E, N: Number> OctreeBase<E, N> {
-    fn with_data(&self, data: <Self as HasData>::Data) -> Self {
+impl<E: Clone, N: Number> OctreeBase<E, N> {
+    fn with_data(&self, data: DataOf<Self>) -> Self {
         OctreeBase {
             data: data,
             ..(*self).clone()
         }
+    }
+    pub fn get_diameter(&self) -> usize {
+        Self::diameter()
     }
 }
 
@@ -370,17 +387,24 @@ mod test {
     fn octree_iterator_contains_correct_elements() {
         use std::collections::HashSet;
 
+        let points = vec![
+            Point3::new(2, 2, 2),
+            Point3::new(2, 4, 2),
+            Point3::new(4, 4, 4),
+            Point3::new(2, 2, 4),
+        ];
+
         let octree = Octree8::new(LevelData::Empty, Point3::origin())
-            .insert(Point3::new(2, 2, 2), 1)
-            .insert(Point3::new(2, 4, 2), 2)
-            .insert(Point3::new(4, 4, 4), 3)
-            .insert(Point3::new(2, 2, 4), 4);
+            .insert(points[0], 1)
+            .insert(points[1], 2)
+            .insert(points[2], 3)
+            .insert(points[3], 4);
 
         let mut expected = HashSet::new();
-        expected.insert(Octant::new(Ref::new(1), Point3::new(2, 2, 2), 1));
-        expected.insert(Octant::new(Ref::new(2), Point3::new(2, 4, 2), 1));
-        expected.insert(Octant::new(Ref::new(3), Point3::new(4, 4, 4), 1));
-        expected.insert(Octant::new(Ref::new(4), Point3::new(2, 2, 4), 1));
+        expected.insert(Octant::new(&1, &points[0], 1));
+        expected.insert(Octant::new(&2, &points[1], 1));
+        expected.insert(Octant::new(&3, &points[2], 1));
+        expected.insert(Octant::new(&4, &points[3], 1));
 
         for octant in &octree {
             assert!(expected.contains(&octant));
@@ -400,10 +424,7 @@ mod test {
             .insert(Point3::new(0, 0, 0), 1234);
 
         let mut iter = (&octree).into_iter();
-        assert_eq!(
-            iter.next(),
-            Some(Octant::new(Ref::new(1234), Point3::origin(), 2))
-        );
+        assert_eq!(iter.next(), Some(Octant::new(&1234, &Point3::origin(), 2)));
     }
 
 }

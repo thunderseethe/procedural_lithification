@@ -7,6 +7,7 @@ pub trait Compress {
 impl<O> Compress for OctreeLevel<O>
 where
     O: HasData + OctreeTypes,
+    ElementOf<O>: Clone,
     <O as HasData>::Data: PartialEq,
 {
     fn compress_nodes(self) -> Self {
@@ -19,7 +20,7 @@ where
                     self.with_data(if head.is_empty() {
                         LevelData::empty()
                     } else if head.is_leaf() {
-                        LevelData::leaf(Ref::clone(head.get_leaf()))
+                        LevelData::leaf(head.get_leaf().clone())
                     } else {
                         panic!("Attempted to compress Node(..) node which should be impossible.");
                     })

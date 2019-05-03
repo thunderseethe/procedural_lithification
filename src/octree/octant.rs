@@ -115,3 +115,19 @@ impl Iterator for OctantIdIter {
         octant
     }
 }
+
+#[derive(Hash, PartialEq, Eq, Debug)]
+pub struct Octant<E, P> {
+    data: E,
+    bottom_left_front: P,
+    diameter: usize,
+}
+impl<E, P> Octant<E, P> {
+    pub fn new(data: E, bottom_left_front: P, diameter: usize) -> Self {
+        Octant {
+            data,
+            bottom_left_front,
+            diameter,
+        }
+    }
+}

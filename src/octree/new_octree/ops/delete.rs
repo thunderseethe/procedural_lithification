@@ -10,8 +10,8 @@ pub trait Delete: FieldType {
 impl<O> Delete for OctreeLevel<O>
 where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes + Delete + Clone,
-    <Self as ElementType>::Element: PartialEq,
-    <O as HasData>::Data: PartialEq,
+    ElementOf<O>: PartialEq + Clone,
+    DataOf<O>: PartialEq + Clone,
 {
     fn delete<P>(&self, pos: P) -> Self
     where
@@ -20,7 +20,7 @@ where
         use crate::octree::new_octree::LevelData::*;
         match self.data {
             Empty => (*self).clone(),
-            Leaf(ref elem) => self.create_sub_nodes(pos, None, O::Data::leaf(Ref::clone(elem))),
+            Leaf(ref elem) => self.create_sub_nodes(pos, None, O::Data::leaf(elem.clone())),
             Node(ref old_nodes) => {
                 let mut nodes = old_nodes.clone();
                 let index: usize = self.get_octant_index(pos.borrow());
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<E, N: Number> Delete for OctreeBase<E, N> {
+impl<E: Clone, N: Number> Delete for OctreeBase<E, N> {
     fn delete<P>(&self, _pos: P) -> Self
     where
         P: Borrow<Point3<N>>,

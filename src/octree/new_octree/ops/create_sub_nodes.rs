@@ -8,26 +8,26 @@ pub trait CreateSubNodes: OctreeTypes {
     fn create_sub_nodes<P>(
         &self,
         pos: P,
-        elem: Option<Ref<Self::Element>>,
+        elem: Option<Self::Element>,
         default: Self::SubData,
     ) -> Self
     where
         P: Borrow<Point3<Self::Field>>;
 
-    fn place<P>(&self, pos: P, data: Option<Ref<Self::Element>>) -> Self
+    fn place<P>(&self, pos: P, data: Option<Self::Element>) -> Self
     where
         P: Borrow<Point3<Self::Field>>;
 }
-impl<E, N: Number> CreateSubNodes for OctreeBase<E, N> {
+impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     type SubData = ();
-    fn create_sub_nodes<P>(&self, pos: P, elem: Option<Ref<Self::Element>>, default: ()) -> Self
+    fn create_sub_nodes<P>(&self, pos: P, elem: Option<Self::Element>, default: ()) -> Self
     where
         P: Borrow<Point3<Self::Field>>,
     {
         (*self).clone()
     }
 
-    fn place<P>(&self, _pos: P, data: Option<Ref<Self::Element>>) -> Self {
+    fn place<P>(&self, _pos: P, data: Option<Self::Element>) -> Self {
         use crate::octree::new_octree::BaseData::*;
         OctreeBase {
             data: data.map(Leaf).unwrap_or(Empty),
@@ -39,15 +39,15 @@ impl<E, N: Number> CreateSubNodes for OctreeBase<E, N> {
 impl<O> CreateSubNodes for OctreeLevel<O>
 where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes,
-    Self::Element: PartialEq,
-    <O as HasData>::Data: PartialEq,
+    ElementOf<O>: PartialEq + Clone,
+    DataOf<O>: PartialEq + Clone,
 {
     type SubData = O::Data;
 
     fn create_sub_nodes<P>(
         &self,
         pos: P,
-        elem: Option<Ref<Self::Element>>,
+        elem: Option<ElementOf<O>>,
         default: Self::SubData,
     ) -> Self
     where
@@ -71,7 +71,7 @@ where
         self.with_data(Node(octree_nodes)).compress_nodes()
     }
 
-    fn place<P>(&self, pos: P, data: Option<Ref<Self::Element>>) -> Self
+    fn place<P>(&self, pos: P, data: Option<ElementOf<O>>) -> Self
     where
         P: Borrow<Point3<Self::Field>>,
     {
@@ -86,7 +86,7 @@ where
                 {
                     self.with_data(data.map(Leaf).unwrap_or(Empty))
                 } else {
-                    self.create_sub_nodes(pos, data, O::Data::leaf(Ref::clone(old_elem)))
+                    self.create_sub_nodes(pos, data, O::Data::leaf(old_elem.clone()))
                 }
             }
             Node(ref old_nodes) => {
