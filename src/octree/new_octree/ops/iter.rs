@@ -58,7 +58,7 @@ impl<'a, E: Clone, N: Number> IntoIterator for OctreeBase<E, N> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.data
-            .as_option()
+            .as_ref()
             .map(|elem| Octant::new(elem.clone(), self.bottom_left.clone(), Self::diameter()))
             .into_iter()
     }
@@ -69,7 +69,7 @@ impl<'a, E, N: Number> IntoIterator for &'a OctreeBase<E, N> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.data
-            .as_option()
+            .as_ref()
             .map(|elem| Octant::new(elem, &self.bottom_left, Self::diameter()))
             .into_iter()
     }

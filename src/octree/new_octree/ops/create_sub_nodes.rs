@@ -28,9 +28,8 @@ impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     }
 
     fn place<P>(&self, _pos: P, data: Option<Self::Element>) -> Self {
-        use crate::octree::new_octree::BaseData::*;
         OctreeBase {
-            data: data.map(Leaf).unwrap_or(Empty),
+            data,
             ..(*self).clone()
         }
     }

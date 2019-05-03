@@ -74,8 +74,8 @@ where
 
     fn into_par_iter(self) -> Self::Iter {
         let p = self.bottom_left;
-        let o: Option<E> = self.data.into();
-        o.map(|elem| Octant::new(elem, p, Self::diameter()))
+        self.data
+            .map(|elem| Octant::new(elem, p, Self::diameter()))
             .into_par_iter()
     }
 }

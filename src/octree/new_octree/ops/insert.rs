@@ -36,6 +36,9 @@ where
         P: Borrow<Point3<N>>,
         R: Into<E>,
     {
-        OctreeBase::new(BaseData::leaf(elem.into()), pos.borrow().clone())
+        OctreeBase::new(
+            <Self as HasData>::Data::leaf(elem.into()),
+            pos.borrow().clone(),
+        )
     }
 }

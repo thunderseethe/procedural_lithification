@@ -1,7 +1,5 @@
-use crate::octree::new_octree::{
-    BaseData, Diameter, FieldType, HasData, LevelData, Number, OctreeBase, OctreeLevel, OctreeTypes,
-};
-use amethyst::core::nalgebra::{Point3, Scalar};
+use crate::octree::new_octree::{FieldType, HasData, Number, OctreeBase, OctreeLevel, OctreeTypes};
+use amethyst::core::nalgebra::Point3;
 
 pub trait New: HasData + FieldType {
     fn new(data: Self::Data, bottom_left: Point3<Self::Field>) -> Self;

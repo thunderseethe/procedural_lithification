@@ -121,41 +121,10 @@ where
     }
 }
 
-/// A leaf node of an Octree. It can either contain a value E or not and is isomorphic to Option<E>.
-#[derive(PartialEq, Debug)]
-pub enum BaseData<E> {
-    Leaf(E),
-    Empty,
-}
-impl<E: Clone> Clone for BaseData<E> {
-    fn clone(&self) -> Self {
-        use BaseData::*;
-        match self {
-            Leaf(e) => Leaf(e.clone()),
-            Empty => Empty,
-        }
-    }
-}
-impl<E> BaseData<E> {
-    fn as_option(&self) -> Option<&E> {
-        use BaseData::*;
-        match self {
-            Leaf(ref elem) => Some(elem),
-            Empty => None,
-        }
-    }
-}
-impl<E> Into<Option<E>> for BaseData<E> {
-    fn into(self) -> Option<E> {
-        match self {
-            BaseData::Leaf(elem) => Some(elem),
-            BaseData::Empty => None,
-        }
-    }
-}
+/// Base of the Octree. This level can only contain Leaf nodes
 #[derive(PartialEq, Debug)]
 pub struct OctreeBase<E, N: Scalar> {
-    data: BaseData<E>,
+    data: Option<E>,
     bottom_left: Point3<N>,
 }
 impl<E: Clone, N: Number> Clone for OctreeBase<E, N> {

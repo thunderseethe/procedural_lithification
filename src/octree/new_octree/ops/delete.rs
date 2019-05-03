@@ -37,6 +37,6 @@ impl<E: Clone, N: Number> Delete for OctreeBase<E, N> {
     where
         P: Borrow<Point3<N>>,
     {
-        self.with_data(BaseData::Empty)
+        self.with_data(None)
     }
 }

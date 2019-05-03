@@ -57,7 +57,7 @@ impl<T> Number for T where
 {
 }
 
-/// Trait to unify our BaseData and LevelData empty nodes.
+/// Trait to unify our OctreeBase::Data and OctreeLevel::Data empty nodes.
 pub trait Empty {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
@@ -77,20 +77,17 @@ where
         }
     }
 }
-impl<E> Empty for BaseData<E> {
+impl<E> Empty for Option<E> {
     fn empty() -> Self {
-        BaseData::Empty
+        None
     }
 
     fn is_empty(&self) -> bool {
-        match self {
-            BaseData::Empty => true,
-            _ => false,
-        }
+        self.is_none()
     }
 }
 
-/// Trait to unify our BaseData and LevelData leaf nodes.
+/// Trait to unify our OctreeBase::Data and OctreeLevel::Data leaf nodes.
 pub trait Leaf<T> {
     fn leaf(value: T) -> Self;
     fn is_leaf(&self) -> bool;
@@ -118,23 +115,17 @@ where
         }
     }
 }
-impl<E> Leaf<E> for BaseData<E> {
+impl<E> Leaf<E> for Option<E> {
     fn leaf(value: E) -> Self {
-        BaseData::Leaf(value)
+        Some(value)
     }
 
     fn is_leaf(&self) -> bool {
-        match self {
-            BaseData::Leaf(_) => true,
-            _ => false,
-        }
+        self.is_some()
     }
 
     fn get_leaf(&self) -> &E {
-        match self {
-            BaseData::Leaf(ref e) => e,
-            _ => panic!("Called get_leaf() on non leaf node."),
-        }
+        self.as_ref().expect("Called get_leaf() on empty node.")
     }
 }
 
@@ -211,7 +202,7 @@ where
     }
 }
 impl<E, N: Scalar> HasData for OctreeBase<E, N> {
-    type Data = BaseData<E>;
+    type Data = Option<E>;
 
     fn data(&self) -> &Self::Data {
         &self.data

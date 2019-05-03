@@ -35,10 +35,6 @@ where
     where
         P: Borrow<Point3<N>>,
     {
-        use crate::octree::new_octree::BaseData::*;
-        match self.data {
-            Empty => None,
-            Leaf(ref elem) => Some(elem),
-        }
+        self.data.as_ref()
     }
 }
