@@ -1,10 +1,27 @@
-use crate::chunk::{block::Block, Chunk};
+use crate::chunk::{block::Block, Chunk, OctreeOf};
 use crate::dimension::morton_code::MortonCode;
-use crate::octree::{Number, Octree};
+use crate::octree::new_octree::*;
+use crate::octree::Octree;
 use amethyst::core::nalgebra::Point3;
 use either::Either;
 use rayon::iter::{plumbing::*, *};
 use std::sync::Arc;
+
+trait ToChunkBuilder {
+    type Output;
+}
+impl<O> ToChunkBuilder for OctreeLevel<O>
+where
+    O: OctreeTypes + ToChunkBuilder,
+{
+    type Output = RawNode<<O as ToChunkBuilder>::Output>;
+}
+impl<E, N> ToChunkBuilder for OctreeBase<E, N>
+where
+    N: Number,
+{
+    type Output = RawLeaf;
+}
 
 struct RawTree(Box<[Option<Block>; 16777216]>);
 impl RawTree {
@@ -184,8 +201,9 @@ pub struct ChunkBuilder {
     tree: RawTree,
 }
 
-type OctreeBuilder =
-    RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawLeaf>>>>>>>>;
+//type OctreeBuilder =
+//    RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawNode<RawLeaf>>>>>>>>;
+type OctreeBuilder = <OctreeOf<Chunk> as ToChunkBuilder>::Output;
 impl ChunkBuilder {
     pub fn new(pos: Point3<i32>) -> Self {
         ChunkBuilder {
@@ -196,11 +214,18 @@ impl ChunkBuilder {
 
     pub fn par_iter_mut<'a>(
         &'a mut self,
-    ) -> impl ParallelIterator<Item = (Point3<Number>, &'a mut Option<Block>)> {
+    ) -> impl ParallelIterator<Item = (Point3<u8>, &'a mut Option<Block>)> {
         (&mut self.tree)
             .into_par_iter()
             .enumerate()
-            .map(|(indx, block)| (MortonCode::from_raw(indx as u64).as_point().unwrap(), block))
+            .map(|(indx, block)| {
+                (
+                    MortonCode::from_raw(indx as u64)
+                        .as_point::<FieldOf<OctreeOf<Chunk>>>()
+                        .unwrap(),
+                    block,
+                )
+            })
     }
 
     pub fn build(self) -> Chunk {

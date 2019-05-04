@@ -7,11 +7,12 @@ use super::octant::{Octant, OctantId};
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 
 mod ops;
 pub use ops::*;
@@ -109,9 +110,101 @@ where
 }
 impl<O> Serialize for OctreeLevel<O>
 where
-    O: Serialize
+    O: OctreeTypes + Serialize,
+    ElementOf<O>: Serialize,
+    FieldOf<O>: Serialize,
 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut octree = serializer.serialize_struct("OctreeLevel", 2)?;
+        octree.serialize_field("data", &self.data)?;
+        octree.serialize_field("bottom_left", &self.bottom_left)?;
+        octree.end()
+    }
+}
+impl<'de, O> Deserialize<'de> for OctreeLevel<O>
+where
+    O: OctreeTypes + Deserialize<'de> + HasPosition,
+    FieldOf<O>: Deserialize<'de>,
+    ElementOf<O>: Deserialize<'de>,
+    PositionOf<O>: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::*;
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Data,
+            BottomLeft,
+        }
 
+        struct OctreeLevelVisitor<O>(std::marker::PhantomData<O>);
+        impl<'de, O> Visitor<'de> for OctreeLevelVisitor<O>
+        where
+            O: OctreeTypes + Deserialize<'de> + HasPosition,
+            FieldOf<O>: Deserialize<'de>,
+            ElementOf<O>: Deserialize<'de>,
+            PositionOf<O>: Deserialize<'de>,
+        {
+            type Value = OctreeLevel<O>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct OctreeLevel<O>")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let data = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(0, &self))?;
+                let bottom_left = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(1, &self))?;
+                Ok(OctreeLevel::new(data, bottom_left))
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut data = None;
+                let mut bottom_left = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Data => {
+                            if data.is_some() {
+                                return Err(Error::duplicate_field("data"));
+                            }
+                            data = Some(map.next_value()?);
+                        }
+                        Field::BottomLeft => {
+                            if bottom_left.is_some() {
+                                return Err(Error::duplicate_field("bottom_left"));
+                            }
+                            bottom_left = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let data = data.ok_or_else(|| Error::missing_field("data"))?;
+                let bottom_left = bottom_left.ok_or_else(|| Error::missing_field("bottom_left"))?;
+                Ok(OctreeLevel::new(data, bottom_left))
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["data", "bottom_left"];
+        deserializer.deserialize_struct(
+            "OctreeLevel",
+            FIELDS,
+            OctreeLevelVisitor(std::marker::PhantomData),
+        )
+    }
 }
 impl<O> fmt::Debug for OctreeLevel<O>
 where

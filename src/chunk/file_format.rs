@@ -8,10 +8,7 @@ use std::sync::Arc;
 use crate::chunk::block::Block;
 use crate::chunk::Chunk;
 use crate::octree::{
-    octant::{Octant, OctantIter},
-    octant_dimensions::OctantDimensions,
-    octree_data::OctreeData,
-    Octree,
+    octant::OctantId, octant_dimensions::OctantDimensions, octree_data::OctreeData, Octree,
 };
 
 #[derive(ToPrimitive, FromPrimitive, Clone, Copy)]
@@ -196,7 +193,7 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
             NodeVariant::Leaf =>
                 OctreeData::Leaf(Arc::new(blocks.next().unwrap())),
             NodeVariant::Branch =>OctreeData::Node(
-                array_init::from_iter(OctantIter::default().map(|octant|
+                array_init::from_iter(OctantId::iter().map(|octant|
                     Arc::new(construct_tree(
                         nodes,
                         blocks,

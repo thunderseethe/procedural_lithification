@@ -9,6 +9,7 @@ extern crate amethyst;
 extern crate bincode;
 extern crate either;
 extern crate flate2;
+extern crate generic_array;
 extern crate ncollide3d;
 extern crate noise;
 extern crate num_traits;

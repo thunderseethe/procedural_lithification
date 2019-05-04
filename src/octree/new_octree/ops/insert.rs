@@ -15,6 +15,7 @@ where
     DataOf<O>: PartialEq + Clone,
     ElementOf<O>: PartialEq + Clone,
     Self: HasPosition<Position = PositionOf<O>>,
+    O: HasPosition<Position = Point3<FieldOf<O>>>,
 {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where

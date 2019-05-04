@@ -9,8 +9,8 @@ use std::{borrow::Borrow, sync::Arc};
 
 pub mod block;
 pub mod chunk_builder;
-pub mod mesher;
 pub mod file_format;
+pub mod mesher;
 
 use block::Block;
 use mesher::Mesher;
@@ -27,7 +27,7 @@ pub trait HasOctree {
 impl HasOctree for Chunk {
     type Octree = Octree8<Block, u8>;
 }
-type OctreeOf<T> = <T as HasOctree>::Octree;
+pub type OctreeOf<T> = <T as HasOctree>::Octree;
 
 impl Chunk {
     pub fn new(pos: Point3<i32>, octree: Octree8<Block, u8>) -> Self {
@@ -37,11 +37,7 @@ impl Chunk {
     pub fn with_block(pos: Point3<i32>, block: Block) -> Self {
         Chunk {
             pos,
-            octree: /*Octree::with_fields(
-                OctreeData::Leaf(Arc::new(block)),
-                OctantDimensions::new(Point3::new(0, 0, 0), 256),
-                8,
-            )*/ Octree8::at_origin(Some(block)),
+            octree: Octree8::at_origin(Some(block)),
         }
     }
 

@@ -11,6 +11,7 @@ pub trait Get: ElementType + HasPosition {
 impl<O> Get for OctreeLevel<O>
 where
     O: Get + Diameter + FieldType,
+    Self: HasPosition<Position = PositionOf<O>>,
 {
     fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where

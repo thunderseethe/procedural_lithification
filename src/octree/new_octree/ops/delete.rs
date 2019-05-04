@@ -13,6 +13,7 @@ where
     ElementOf<O>: PartialEq + Clone,
     DataOf<O>: PartialEq + Clone,
     Self: HasPosition<Position = PositionOf<O>>,
+    O: HasPosition<Position = Point3<FieldOf<O>>>,
 {
     fn delete<P>(&self, pos: P) -> Self
     where

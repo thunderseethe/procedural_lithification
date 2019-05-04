@@ -233,7 +233,7 @@ impl<O> HasPosition for OctreeLevel<O>
 where
     O: OctreeTypes,
 {
-    type Position = Point3<<Self as FieldType>::Field>;
+    type Position = Point3<FieldOf<Self>>;
 
     fn position(&self) -> &Self::Position {
         &self.bottom_left
