@@ -21,10 +21,13 @@ use amethyst::{
     },
     shrev::EventChannel,
     ui::{DrawUi, UiBundle, UiCreator},
+    utils::application_root_dir,
 };
 use cubes_lib::{
+    collision::{CollisionDetection, CollisionDetectionError},
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
+        collision::CheckPlayerCollisionSystem,
         dimension::{DimensionBundle, DimensionChunkEvent},
         player::{PlayerControlBundle, PlayerControlTag},
     },
@@ -36,7 +39,7 @@ use tokio::runtime::Runtime;
 
 struct Gameplay {
     dimension_config: DimensionConfig,
-    // Holds points that have been queued for generation so we don't re queue them
+    // Holds points that have been queued for generation so we don't re generate them
     generate_queue_set: Arc<Mutex<HashSet<MortonCode>>>,
 }
 
@@ -48,7 +51,11 @@ impl Gameplay {
         }
     }
 
-    pub fn init_dimension(&self, runtime: &mut Runtime) -> Dimension {
+    pub fn init_dimension(
+        &self,
+        runtime: &mut Runtime,
+        collision: &mut CollisionDetection,
+    ) -> Dimension {
         std::fs::create_dir_all(&self.dimension_config.directory)
             .expect("Unable to create dimension directory");
         let mut dimension = Dimension::default();
@@ -61,13 +68,18 @@ impl Gameplay {
         //        )
         //        .expect(&format!("Failed to create intial chunk at {:?}", point));
         //}
-        dimension
-            ._create_or_load_chunk(
-                self.dimension_config.directory.as_path(),
-                MortonCode::from_raw(0),
-                Point3::origin(),
-            )
-            .expect("It didn't work");
+        {
+            let chunk = dimension
+                ._create_or_load_chunk(
+                    self.dimension_config.directory.as_path(),
+                    MortonCode::from_raw(0),
+                    Point3::origin(),
+                )
+                .expect("Failed to generate chunk at origin");
+            collision
+                .add_chunk(&chunk)
+                .expect("Chunk at origin already present");
+        }
         dimension.store(self.dimension_config.directory.as_path(), runtime);
         dimension
     }
@@ -108,6 +120,7 @@ impl Gameplay {
                     .collect()
             },
         );
+        // I miss us
         for (point, mesh) in meshes {
             let mut pos: Transform = Transform::default();
             pos.set_xyz(point.x, point.y, point.z);
@@ -144,7 +157,8 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
 
         println!("Put camera");
         let mut transform = Transform::default();
-        transform.set_xyz(128.0, 128.0, 128.0);
+        let player_pos = Point3::new(128.0, 128.0, 128.0);
+        transform.set_position(player_pos.coords);
         transform.rotate_local(Vector3::y_axis(), std::f32::consts::PI);
         world
             .create_entity()
@@ -156,11 +170,13 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             .with(PlayerControlTag::default())
             .build();
 
+        let mut collision = CollisionDetection::new(player_pos);
         let dimension = {
             let mut runtime = world.write_resource::<Runtime>();
-            self.init_dimension(&mut runtime)
+            self.init_dimension(&mut runtime, &mut collision)
         };
         world.add_resource(Arc::new(Mutex::new(dimension)));
+        world.add_resource(Arc::new(Mutex::new(collision)));
         Gameplay::render_initial_dimension(&mut world);
         println!("Rendered Initial Dimension");
 
@@ -219,12 +235,16 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             let player_chunk = Gameplay::convert_to_chunk_coord(transform.translation());
             let thread_pool = data.world.read_resource::<ArcThreadPool>().clone();
             let dimension = data.world.write_resource::<Arc<Mutex<Dimension>>>();
+            let collision = data
+                .world
+                .write_resource::<Arc<Mutex<CollisionDetection>>>();
             let channel = Arc::new(Mutex::new(
                 data.world
                     .write_resource::<EventChannel<DimensionChunkEvent>>(),
             ));
             thread_pool.scope(|s| {
                 let dimension_ref = &dimension;
+                let collision_ref = &collision;
                 let generate_queue_set_ref = &self.generate_queue_set;
                 let channel_ref = &channel;
                 let dimension_dir = self.dimension_config.directory.as_path();
@@ -232,6 +252,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
                     .into_iter()
                 {
                     s.spawn(move |_| {
+                        let collision = Arc::clone(collision_ref);
                         let dimension = Arc::clone(dimension_ref);
                         let generate_queue_set = Arc::clone(generate_queue_set_ref);
                         let channel = Arc::clone(channel_ref);
@@ -246,6 +267,14 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
                                     .lock()
                                     ._create_or_load_chunk(dimension_dir, morton, point)
                             {
+                                collision.lock().add_chunk(&chunk).unwrap_or_else(
+                                    |err| match err {
+                                        CollisionDetectionError::ChunkAlreadyPresent => println!(
+                                            "Chunk already loading into collision detection {}",
+                                            point
+                                        ),
+                                    },
+                                );
                                 chunk.generate_mesh().map(|chunk_render_info| {
                                     channel.lock().iter_write(chunk_render_info.into_iter().map(
                                         |(point, mesh_data)| {
@@ -267,8 +296,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 
-    let home = dirs::home_dir().unwrap();
-    let app_root = home.join("google_drive").join("cubes");
+    let app_root = PathBuf::from(application_root_dir());
     let resources = app_root.join("resources");
     let display_config = DisplayConfig::load(resources.join("display_config.ron"));
     let key_bindings_path = resources.join("input.ron");
@@ -298,7 +326,8 @@ fn main() -> amethyst::Result<()> {
             InputBundle::<String, String>::new().with_bindings_from_file(&key_bindings_path)?,
         )?
         .with_bundle(RenderBundle::new(pipeline_builder, Some(display_config)))?
-        .with_bundle(DimensionBundle::new())?;
+        .with_bundle(DimensionBundle::new())?
+        .with(CheckPlayerCollisionSystem, "check_player_collision", &[]);
 
     let mut game = Application::build(
         &resources,
