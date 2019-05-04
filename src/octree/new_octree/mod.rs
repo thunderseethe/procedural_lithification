@@ -11,6 +11,7 @@ use std::borrow::Borrow;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
+use serde::{Serialize, Deserialize};
 
 mod ops;
 pub use ops::*;
@@ -39,6 +40,7 @@ where
 }
 
 /// Data for a single level of an Octree.
+#[derive(Deserialize, Serialize)]
 pub enum LevelData<O>
 where
     O: OctreeTypes,
@@ -105,6 +107,12 @@ where
     data: LevelData<O>,
     bottom_left: Point3<O::Field>,
 }
+impl<O> Serialize for OctreeLevel<O>
+where
+    O: Serialize
+{
+
+}
 impl<O> fmt::Debug for OctreeLevel<O>
 where
     O: OctreeTypes + fmt::Debug,
@@ -143,7 +151,7 @@ where
 }
 
 /// Base of the Octree. This level can only contain Leaf nodes
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct OctreeBase<E, N: Scalar> {
     data: Option<E>,
     bottom_left: Point3<N>,
