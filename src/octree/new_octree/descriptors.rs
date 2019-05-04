@@ -1,5 +1,6 @@
 /// Contains traits that describe properties of an Octree.
 use super::*;
+use alga::general::{ClosedAdd, ClosedSub, SubsetOf};
 use num_traits::Num;
 use std::ops::{Shl, Shr};
 use typenum::{Bit, PowerOfTwo, Shleft, UInt, Unsigned, B0, B1, U1};
@@ -14,21 +15,24 @@ pub trait FieldType {
 impl<E, N: Scalar> ElementType for OctreeBase<E, N> {
     type Element = E;
 }
+impl<'a, T> ElementType for &'a T
+where
+    T: ElementType,
+{
+    type Element = ElementOf<T>;
+}
 impl<E, N: Number> FieldType for OctreeBase<E, N> {
     type Field = N;
+}
+impl<'a, T> FieldType for &'a T where T: FieldType {
+    type Field = FieldOf<T>;
 }
 
 impl<O: OctreeTypes> ElementType for OctreeLevel<O> {
     type Element = O::Element;
 }
-impl<'a, O: OctreeTypes> ElementType for &'a OctreeLevel<O> {
-    type Element = <OctreeLevel<O> as ElementType>::Element;
-}
 impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
     type Field = O::Field;
-}
-impl<'a, O: OctreeTypes> FieldType for &'a OctreeLevel<O> {
-    type Field = <O as FieldType>::Field;
 }
 
 // Convenience wrapper to avoid busting my + key
@@ -51,9 +55,12 @@ impl<T> Number for T where
         + Num
         + NumCast
         + PartialOrd
+        + ClosedSub
+        + ClosedAdd
         + Shr<Self, Output = Self>
         + Shl<Self, Output = Self>
         + AsPrimitive<usize>
+        + SubsetOf<usize>
 {
 }
 
@@ -132,6 +139,10 @@ impl<E> Leaf<E> for Option<E> {
 pub trait Diameter {
     type Diameter: Unsigned + Double;
     fn diameter() -> usize;
+
+    fn get_diameter(&self) -> usize {
+        Self::diameter()
+    }
 }
 impl<O> Diameter for OctreeLevel<O>
 where
@@ -141,16 +152,6 @@ where
 
     fn diameter() -> usize {
         O::diameter() << 1
-    }
-}
-impl<'a, O> Diameter for &'a OctreeLevel<O>
-where
-    O: Diameter + OctreeTypes,
-{
-    type Diameter = <OctreeLevel<O> as Diameter>::Diameter;
-
-    fn diameter() -> usize {
-        OctreeLevel::<O>::diameter()
     }
 }
 impl<E, N> Diameter for OctreeBase<E, N>
@@ -163,14 +164,14 @@ where
         1
     }
 }
-impl<'a, E, N> Diameter for &'a OctreeBase<E, N>
+impl<'a, T> Diameter for &'a T
 where
-    N: Number,
+    T: Diameter,
 {
-    type Diameter = <OctreeBase<E, N> as Diameter>::Diameter;
+    type Diameter = T::Diameter;
 
     fn diameter() -> usize {
-        OctreeBase::<E, N>::diameter()
+        T::diameter()
     }
 }
 
@@ -213,6 +214,13 @@ pub trait HasPosition {
     type Position;
 
     fn position(&self) -> &Self::Position;
+}
+impl<'a, T> HasPosition for &'a T where T: HasPosition {
+    type Position = PositionOf<T>;
+
+    fn position(&self) -> &Self::Position {
+        &self.position()
+    }
 }
 impl<O> HasPosition for OctreeLevel<O>
 where

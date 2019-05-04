@@ -1,10 +1,10 @@
 use crate::octree::new_octree::*;
 use std::borrow::Borrow;
 
-pub trait Delete: FieldType {
+pub trait Delete: HasPosition {
     fn delete<P>(&self, pos: P) -> Self
     where
-        P: Borrow<Point3<Self::Field>>;
+        P: Borrow<Self::Position>;
 }
 
 impl<O> Delete for OctreeLevel<O>
@@ -12,10 +12,11 @@ where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes + Delete + Clone,
     ElementOf<O>: PartialEq + Clone,
     DataOf<O>: PartialEq + Clone,
+    Self: HasPosition<Position = PositionOf<O>>,
 {
     fn delete<P>(&self, pos: P) -> Self
     where
-        P: Borrow<Point3<Self::Field>>,
+        P: Borrow<PositionOf<Self>>,
     {
         use crate::octree::new_octree::LevelData::*;
         match self.data {

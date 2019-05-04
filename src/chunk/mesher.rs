@@ -1,5 +1,6 @@
 use super::block::Block;
-use crate::octree::{octant_face::OctantFace, Octree};
+use crate::octree::new_octree::*;
+use crate::octree::{octant::Octant, octant_face::OctantFace, Octree};
 use crate::volume::Cuboid;
 use alga::general::SubsetOf;
 use amethyst::core::nalgebra as na;
@@ -67,26 +68,34 @@ fn option_xor<A>(opt_a: Option<A>, opt_b: Option<A>) -> Option<A> {
     }
 }
 
-pub struct Mesher<'a> {
-    octree: &'a Octree<Block>,
-    offset: Vector3<u8>,
+pub struct Mesher<'a, O>
+where
+    O: FieldType,
+{
+    octree: &'a O,
+    offset: Vector3<FieldOf<O>>,
     size: usize,
 }
-impl<'a> Mesher<'a> {
-    pub fn new(octree: &'a Octree<Block>) -> Self {
-        let p = octree.root_point();
-        Mesher {
-            octree,
-            offset: Vector3::new(p.x, p.y, p.z),
-            size: octree.bounds().diameter() as usize,
-        }
-    }
-
+impl<'a, O: FieldType> Mesher<'a, O> {
     pub fn to_index<N: SubsetOf<usize> + Display>(&self, x_: N, y_: N, z_: N) -> usize {
         let x: usize = x_.to_superset();
         let y: usize = y_.to_superset();
         let z: usize = z_.to_superset();
         x + y * self.size + z * self.size * self.size
+    }
+}
+impl<'a, O> Mesher<'a, O>
+where
+    O: OctreeLike + HasPosition<Position = Point3<FieldOf<O>>>,
+    &'a O: IntoIterator,
+{
+    pub fn new(octree: &'a O) -> Self {
+        let p = octree.position();
+        Mesher {
+            octree,
+            offset: Vector3::new(p.x, p.y, p.z),
+            size: O::diameter(),
+        }
     }
 
     pub fn generate_quads_array(&self) -> Vec<Quad> {
@@ -94,12 +103,13 @@ impl<'a> Mesher<'a> {
         let size_iter: i32 = self.size as i32;
         let mut mask: Vec<Option<(Block, bool)>> = vec![None; self.size * self.size];
         let mut chunk: Vec<Option<Block>> = vec![None; self.size * self.size * self.size];
-        self.octree.iter().for_each(|(dim, block)| {
-            let bottom_left: Point3<u16> = { na::convert(dim.bottom_left() - self.offset) };
-            let top_right: Point3<u16> =
-                { dim.top_right() - na::convert::<Vector3<u8>, Vector3<u16>>(self.offset) };
-            for p in Cuboid::<u16>::new(bottom_left, top_right).into_iter() {
-                chunk[self.to_index(p.x, p.y, p.z)] = Some(*block);
+        self.octree.into_iter().for_each(|octant| {
+            let bottom_left: Point3<usize> = na::convert(octant.bottom_left_front - self.offset);
+            let top_right: Point3<usize> = {
+                octant.top_right() - na::convert::<Vector3<FieldOf<O>>, Vector3<usize>>(self.offset)
+            };
+            for p in Cuboid::new(bottom_left, top_right).into_iter() {
+                chunk[self.to_index(p.x, p.y, p.z)] = Some(*octant.data);
             }
         });
         let mut x: Point3<i32> = Point3::origin();

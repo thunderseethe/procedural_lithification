@@ -26,8 +26,17 @@ pub use consts::{Octree, Octree8};
 type Ref<T> = Arc<T>;
 
 pub type DataOf<T> = <T as HasData>::Data;
+pub type PositionOf<T> = <T as HasPosition>::Position;
 pub type ElementOf<T> = <T as ElementType>::Element;
 pub type FieldOf<T> = <T as FieldType>::Field;
+
+pub trait OctreeLike: New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes {}
+impl<'a, T: 'a> OctreeLike for T
+where
+    T: New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes,
+    &'a T: IntoIterator,
+{
+}
 
 /// Data for a single level of an Octree.
 pub enum LevelData<O>
@@ -81,6 +90,12 @@ where
         }
     }
 }
+impl<O> Eq for LevelData<O>
+where
+    O: OctreeTypes + Eq,
+    ElementOf<O>: Eq,
+{
+}
 
 /// Node struct for level of an Octree.
 pub struct OctreeLevel<O>
@@ -111,6 +126,12 @@ where
         self.bottom_left.eq(&other.bottom_left) && self.data.eq(&other.data)
     }
 }
+impl<O> Eq for OctreeLevel<O>
+where
+    O: OctreeTypes + Eq,
+    ElementOf<O>: Eq,
+{
+}
 impl<O> Clone for OctreeLevel<O>
 where
     O: OctreeTypes + Clone,
@@ -122,7 +143,7 @@ where
 }
 
 /// Base of the Octree. This level can only contain Leaf nodes
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct OctreeBase<E, N: Scalar> {
     data: Option<E>,
     bottom_left: Point3<N>,
@@ -192,6 +213,13 @@ where
 }
 // This is the least restrictive impl for our OctreeLevel so most of our helper methods live here
 impl<O: OctreeTypes> OctreeLevel<O> {
+    pub fn at_origin(init: Option<ElementOf<Self>>) -> Self {
+        let data: DataOf<Self> = init
+            .map(<Self as HasData>::Data::leaf)
+            .unwrap_or_else(<Self as HasData>::Data::empty);
+        OctreeLevel::new(data, Point3::origin())
+    }
+
     fn with_data(&self, data: DataOf<Self>) -> Self {
         OctreeLevel {
             data: data,

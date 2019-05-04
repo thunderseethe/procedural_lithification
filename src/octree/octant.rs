@@ -1,6 +1,9 @@
+use super::new_octree::descriptors::{Diameter, HasData, HasPosition};
 use super::octant_dimensions::OctantDimensions;
-use amethyst::core::nalgebra::geometry::Point3;
+use alga::general::ClosedAdd;
+use amethyst::core::nalgebra::{convert, Point3, Scalar, Vector3};
 use num_traits::{AsPrimitive, FromPrimitive};
+use std::borrow::Borrow;
 
 /// Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
@@ -118,8 +121,8 @@ impl Iterator for OctantIdIter {
 
 #[derive(Hash, PartialEq, Eq, Debug)]
 pub struct Octant<E, P> {
-    data: E,
-    bottom_left_front: P,
+    pub data: E,
+    pub bottom_left_front: P,
     diameter: usize,
 }
 impl<E, P> Octant<E, P> {
@@ -129,5 +132,19 @@ impl<E, P> Octant<E, P> {
             bottom_left_front,
             diameter,
         }
+    }
+}
+
+impl<'a, E, N: Scalar + ClosedAdd> Octant<E, &'a Point3<N>> {
+    pub fn top_right(&self) -> Point3<usize> {
+        convert(self.bottom_left_front) + Vector3::new(self.diameter, self.diameter, self.diameter)
+    }
+}
+
+impl<E, P> HasPosition for Octant<E, P> {
+    type Position = P;
+
+    fn position(&self) -> &Self::Position {
+        self.bottom_left_front
     }
 }

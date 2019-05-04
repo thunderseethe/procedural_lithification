@@ -2,7 +2,7 @@ use crate::octree::new_octree::*;
 
 /// Trait for internal bookkeeping of Octree duing insertion and deletion.
 /// Not a publicly available method.
-pub trait CreateSubNodes: OctreeTypes {
+pub trait CreateSubNodes: ElementType + HasPosition {
     type SubData;
 
     fn create_sub_nodes<P>(
@@ -12,17 +12,17 @@ pub trait CreateSubNodes: OctreeTypes {
         default: Self::SubData,
     ) -> Self
     where
-        P: Borrow<Point3<Self::Field>>;
+        P: Borrow<Self::Position>;
 
     fn place<P>(&self, pos: P, data: Option<Self::Element>) -> Self
     where
-        P: Borrow<Point3<Self::Field>>;
+        P: Borrow<Self::Position>;
 }
 impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     type SubData = ();
     fn create_sub_nodes<P>(&self, pos: P, elem: Option<Self::Element>, default: ()) -> Self
     where
-        P: Borrow<Point3<Self::Field>>,
+        P: Borrow<PositionOf<Self>>,
     {
         (*self).clone()
     }
@@ -40,6 +40,7 @@ where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes,
     ElementOf<O>: PartialEq + Clone,
     DataOf<O>: PartialEq + Clone,
+    Self: HasPosition<Position = PositionOf<O>>,
 {
     type SubData = O::Data;
 
@@ -50,7 +51,7 @@ where
         default: Self::SubData,
     ) -> Self
     where
-        P: Borrow<Point3<Self::Field>>,
+        P: Borrow<PositionOf<Self>>,
     {
         use crate::octree::new_octree::LevelData::Node;
         use crate::octree::octant::OctantId;
@@ -72,7 +73,7 @@ where
 
     fn place<P>(&self, pos: P, data: Option<ElementOf<O>>) -> Self
     where
-        P: Borrow<Point3<Self::Field>>,
+        P: Borrow<PositionOf<Self>>,
     {
         use crate::octree::new_octree::LevelData::*;
         match &self.data {

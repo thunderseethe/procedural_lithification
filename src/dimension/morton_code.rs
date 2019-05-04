@@ -1,7 +1,6 @@
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::NumCast;
 use std::{borrow::Borrow, fmt, mem};
-
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug, Hash)]
 pub struct MortonCode(u64);
 
@@ -226,7 +225,6 @@ const MORTON_DECODE_X: [u64; 512] = [
 #[cfg(test)]
 mod test {
     use super::*;
-    use itertools::iproduct;
     fn split_by_n(input: u64, bits_remaining: usize) -> u64 {
         if bits_remaining == 0 {
             input
@@ -264,7 +262,10 @@ mod test {
     #[test]
     fn test_morton_encoding_against_control() {
         let field_bits = 32 / 3;
-        for (offset, i, j, k) in iproduct!(0..=(field_bits - 4), 0..16, 0..16, 0..16) {
+        let monstrosity = (0..=(field_bits - 4)).flat_map(|offset| {
+            (0..16).flat_map(|i| (0..16).flat_map(|j| (0..16).map(|k| (offset, i, j, k))))
+        });
+        for (offset, i, j, k) in monstrosity {
             let x: i32 = i << offset;
             let y: i32 = j << offset;
             let z: i32 = k << offset;

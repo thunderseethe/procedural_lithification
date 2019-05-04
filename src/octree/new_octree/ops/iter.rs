@@ -3,8 +3,9 @@ use crate::octree::octant::Octant;
 
 impl<'a, O> IntoIterator for &'a OctreeLevel<O>
 where
-    O: OctreeTypes + Diameter,
-    &'a O: IntoIterator<Item = Octant<&'a O::Element, &'a Point3<O::Field>>>,
+    O: OctreeTypes + Diameter + HasPosition,
+    //&'a O: IntoIterator<Item = Octant<&'a O::Element, &'a O::Position>>,
+    &'a O: IntoIterator + Diameter + OctreeTypes,
 {
     type Item = <&'a O as IntoIterator>::Item;
     type IntoIter = OctantIter<

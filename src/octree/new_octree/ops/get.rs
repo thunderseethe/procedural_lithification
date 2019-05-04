@@ -1,20 +1,20 @@
-use crate::octree::new_octree::descriptors::{Number, OctreeTypes};
-use crate::octree::new_octree::{Diameter, OctreeBase, OctreeLevel};
+use crate::octree::new_octree::descriptors::{ElementType, FieldType, HasPosition, Number};
+use crate::octree::new_octree::{Diameter, OctreeBase, OctreeLevel, PositionOf};
 use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
 
-pub trait Get: OctreeTypes {
+pub trait Get: ElementType + HasPosition {
     fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where
-        P: Borrow<Point3<Self::Field>>;
+        P: Borrow<Self::Position>;
 }
 impl<O> Get for OctreeLevel<O>
 where
-    O: Get + Diameter,
+    O: Get + Diameter + FieldType,
 {
     fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where
-        P: Borrow<Point3<Self::Field>>,
+        P: Borrow<PositionOf<Self>>,
     {
         use crate::octree::new_octree::LevelData::*;
         match self.data {
@@ -33,7 +33,7 @@ where
 {
     fn get<P>(&self, _pos: P) -> Option<&E>
     where
-        P: Borrow<Point3<N>>,
+        P: Borrow<PositionOf<Self>>,
     {
         self.data.as_ref()
     }

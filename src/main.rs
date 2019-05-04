@@ -1,7 +1,6 @@
 extern crate amethyst;
 extern crate cubes_lib;
 extern crate dirs;
-extern crate itertools;
 extern crate parking_lot;
 extern crate tokio;
 
