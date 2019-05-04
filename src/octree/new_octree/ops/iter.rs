@@ -5,9 +5,10 @@ impl<'a, O> IntoIterator for &'a OctreeLevel<O>
 where
     O: OctreeTypes + Diameter + HasPosition,
     //&'a O: IntoIterator<Item = Octant<&'a O::Element, &'a O::Position>>,
-    &'a O: IntoIterator + Diameter + OctreeTypes,
+    &'a O:
+        IntoIterator<Item = Octant<&'a ElementOf<O>, &'a PositionOf<O>>> + Diameter + OctreeTypes,
 {
-    type Item = <&'a O as IntoIterator>::Item;
+    type Item = Octant<&'a ElementOf<O>, &'a PositionOf<O>>;
     type IntoIter = OctantIter<
         Self::Item,
         std::slice::Iter<'a, Ref<O>>,

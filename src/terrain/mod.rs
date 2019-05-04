@@ -142,9 +142,9 @@ mod test {
         );
         let chunk = terrain.generate_chunk(Point3::origin());
         println!("{:?}", chunk);
-        for (dim, block) in chunk.iter() {
-            assert_eq!(block, &1);
-            assert!(dim.bottom_left.y < 128);
+        for octant in chunk.iter() {
+            assert_eq!(octant.data, &1);
+            assert!(octant.bottom_left_front.y < 128);
         }
     }
 
@@ -163,10 +163,10 @@ mod test {
             },
         );
         let chunk = terrain.generate_chunk(Point3::origin());
-        for (dim, block) in chunk.iter() {
-            let x = dim.bottom_left.x as isize - 128;
-            let y = dim.bottom_left.y as isize - 128;
-            let z = dim.bottom_left.z as isize - 128;
+        for octant in chunk.iter() {
+            let x = octant.bottom_left_front.x as isize - 128;
+            let y = octant.bottom_left_front.y as isize - 128;
+            let z = octant.bottom_left_front.z as isize - 128;
             assert!(x * x + y * y + z * z <= 64 * 64);
         }
     }

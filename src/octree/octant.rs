@@ -123,7 +123,7 @@ impl Iterator for OctantIdIter {
 pub struct Octant<E, P> {
     pub data: E,
     pub bottom_left_front: P,
-    diameter: usize,
+    pub diameter: usize,
 }
 impl<E, P> Octant<E, P> {
     pub fn new(data: E, bottom_left_front: P, diameter: usize) -> Self {
@@ -145,6 +145,6 @@ impl<E, P> HasPosition for Octant<E, P> {
     type Position = P;
 
     fn position(&self) -> &Self::Position {
-        self.bottom_left_front
+        &self.bottom_left_front
     }
 }

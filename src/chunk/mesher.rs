@@ -87,7 +87,9 @@ impl<'a, O: FieldType> Mesher<'a, O> {
 impl<'a, O> Mesher<'a, O>
 where
     O: OctreeLike + HasPosition<Position = Point3<FieldOf<O>>>,
-    &'a O: IntoIterator,
+    &'a O: IntoIterator<Item = Octant<&'a ElementOf<O>, &'a PositionOf<O>>>,
+    ElementOf<O>: Clone + PartialEq,
+    FieldOf<O>: SubsetOf<usize>,
 {
     pub fn new(octree: &'a O) -> Self {
         let p = octree.position();
@@ -98,15 +100,22 @@ where
         }
     }
 
-    pub fn generate_quads_array(&self) -> Vec<Quad> {
+    pub fn generate_quads_array(&self) -> Vec<Quad<ElementOf<O>>> {
         let mut quads = Vec::new();
         let size_iter: i32 = self.size as i32;
-        let mut mask: Vec<Option<(Block, bool)>> = vec![None; self.size * self.size];
-        let mut chunk: Vec<Option<Block>> = vec![None; self.size * self.size * self.size];
+        let mut mask: Vec<Option<(ElementOf<O>, bool)>> = vec![None; self.size * self.size];
+        let mut chunk: Vec<Option<ElementOf<O>>> = vec![None; self.size * self.size * self.size];
         self.octree.into_iter().for_each(|octant| {
-            let bottom_left: Point3<usize> = na::convert(octant.bottom_left_front - self.offset);
+            let blf: Point3<FieldOf<O>> = octant.bottom_left_front - self.offset;
+            let bottom_left: Point3<usize> = Point3::new(blf.x.as_(), blf.y.as_(), blf.z.as_());
+            //let bottom_left: Point3<usize> = na::convert();
             let top_right: Point3<usize> = {
-                octant.top_right() - na::convert::<Vector3<FieldOf<O>>, Vector3<usize>>(self.offset)
+                octant.top_right()
+                    - Vector3::new(
+                        self.offset.x.as_(),
+                        self.offset.y.as_(),
+                        self.offset.z.as_(),
+                    )
             };
             for p in Cuboid::new(bottom_left, top_right).into_iter() {
                 chunk[self.to_index(p.x, p.y, p.z)] = Some(*octant.data);
@@ -211,21 +220,21 @@ where
 }
 
 #[derive(Eq, PartialEq)]
-pub struct Quad {
+pub struct Quad<T> {
     bottom_left: Point3<i32>,
     top_left: Point3<i32>,
     bottom_right: Point3<i32>,
     top_right: Point3<i32>,
-    block: Block,
+    data: T,
     pub face: OctantFace,
 }
-impl Quad {
+impl<T> Quad<T> {
     pub fn new(
         bottom_left: Point3<i32>,
         top_left: Point3<i32>,
         bottom_right: Point3<i32>,
         top_right: Point3<i32>,
-        block: Block,
+        data: T,
         face: OctantFace,
     ) -> Self {
         Quad {
@@ -233,7 +242,7 @@ impl Quad {
             top_left,
             bottom_right,
             top_right,
-            block,
+            data,
             face,
         }
     }
@@ -334,7 +343,7 @@ fn pos_norm_tex(
     }
 }
 
-impl fmt::Display for Quad {
+impl<T: fmt::Display> fmt::Display for Quad<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -343,35 +352,35 @@ impl fmt::Display for Quad {
             self.top_right,
             self.bottom_left,
             self.bottom_right,
-            self.block,
+            self.data,
             self.face
         )
     }
 }
-impl fmt::Debug for Quad {
+impl<T: fmt::Debug> fmt::Debug for Quad<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Quad({}, {}, {}, {}, {}, {:?})",
+            "Quad({}, {}, {}, {}, {:?}, {:?})",
             self.bottom_left,
             self.top_left,
             self.bottom_right,
             self.top_right,
-            self.block,
+            self.data,
             self.face
         )
     }
 }
-impl PartialOrd for Quad {
+impl<T: PartialOrd + Eq> PartialOrd for Quad<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.face != other.face || self.block != other.block {
+        if self.face != other.face || self.data != other.data {
             None
         } else {
             Some(self.cmp(other))
         }
     }
 }
-impl Ord for Quad {
+impl<T: PartialOrd + Eq> Ord for Quad<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         let (x, y, w, h) = (self.u(), self.v(), self.width(), self.height());
         let (_x, _y, _w, _h) = (other.u(), other.v(), other.width(), other.height());

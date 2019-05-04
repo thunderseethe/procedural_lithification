@@ -24,7 +24,10 @@ where
 impl<E, N: Number> FieldType for OctreeBase<E, N> {
     type Field = N;
 }
-impl<'a, T> FieldType for &'a T where T: FieldType {
+impl<'a, T> FieldType for &'a T
+where
+    T: FieldType,
+{
     type Field = FieldOf<T>;
 }
 
@@ -45,6 +48,8 @@ pub trait Number:
     + Num
     + NumCast
     + PartialOrd
+    + ClosedSub
+    + ClosedAdd
     + Shr<Self, Output = Self>
     + Shl<Self, Output = Self>
     + AsPrimitive<usize>
@@ -60,7 +65,6 @@ impl<T> Number for T where
         + Shr<Self, Output = Self>
         + Shl<Self, Output = Self>
         + AsPrimitive<usize>
-        + SubsetOf<usize>
 {
 }
 
@@ -215,7 +219,10 @@ pub trait HasPosition {
 
     fn position(&self) -> &Self::Position;
 }
-impl<'a, T> HasPosition for &'a T where T: HasPosition {
+impl<'a, T> HasPosition for &'a T
+where
+    T: HasPosition,
+{
     type Position = PositionOf<T>;
 
     fn position(&self) -> &Self::Position {

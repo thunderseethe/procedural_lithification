@@ -79,10 +79,10 @@ impl CollisionDetection {
         let root = chunk.pos * 256;
         let terrain_handles = chunk
             .iter()
-            .map(|(dimensions, _)| {
-                let rel_pos: Point3<i32> = na::convert(dimensions.bottom_left);
+            .map(|octant| {
+                let rel_pos: Point3<i32> = na::convert(*octant.bottom_left_front);
                 let pos: Point3<f32> = na::convert(root + rel_pos.coords);
-                let radius = (dimensions.diameter() / 2) as f32;
+                let radius = (octant.diameter / 2) as f32;
                 let isometry =
                     Isometry::translation(pos.x + radius, pos.y + radius, pos.z + radius);
                 let shape = ShapeHandle::new(Cuboid::new(Vector::new(radius, radius, radius)));

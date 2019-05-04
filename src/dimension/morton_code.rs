@@ -284,7 +284,9 @@ mod test {
     #[test]
     fn test_morton_decoding_against_control() {
         let encoded_bits = (64 / 3) * 3;
-        for (offset, morton) in iproduct!(0..=(encoded_bits - 12), 0..4096) {
+        let product =
+            (0..=(encoded_bits - 12)).flat_map(|offset| (0..4096).map(|morton| (offset, morton)));
+        for (offset, morton) in product {
             let encoded = morton << offset;
             let expected = control_decode_impl(encoded);
             let result = MortonCode::from_raw(encoded).decode();

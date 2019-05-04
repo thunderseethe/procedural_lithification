@@ -1,6 +1,5 @@
 use crate::mut_ptr::MultiThreadMutPtr;
 use crate::octree::new_octree::*;
-use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
 use amethyst::{
     core::nalgebra::{convert, Point3, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
@@ -93,6 +92,7 @@ impl Chunk {
                                     children
                                         .par_iter()
                                         .filter_map(|octree| {
+                                            use typenum::U64;
                                             let octree_root_offset: Vector3<f32> =
                                                 convert(octree.root_point().coords);
 
@@ -106,7 +106,10 @@ impl Chunk {
                                                     ))
                                                 },
                                                 |_| {
-                                                    let mesher = Mesher::new(octree.as_ref());
+                                                    let mesher =
+                                                        Mesher::<Octree<Block, u8, U64>>::new(
+                                                            octree.as_ref(),
+                                                        );
                                                     let quads = mesher.generate_quads_array();
                                                     let mut mesh_data: Vec<PosNormTex> =
                                                         Vec::with_capacity(quads.len() * 6);
