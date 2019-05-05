@@ -8,6 +8,7 @@ use crate::chunk::{
     chunk_builder::ChunkBuilder,
     Chunk,
 };
+use crate::octree::new_octree::builder::Builder;
 use crate::octree::Number;
 
 pub type HeightMap = [[u8; 256]; 256];
@@ -117,11 +118,11 @@ where
     {
         let chunk_pos = chunk_pos_ref.borrow();
         let height_map = self.create_height_map(chunk_pos);
-        let mut chunk_to_be = ChunkBuilder::new(*chunk_pos);
+        let mut chunk_to_be = Chunk::builder();
         chunk_to_be
             .par_iter_mut()
             .for_each(|(pos, block)| *block = self.generate_block.generate(&height_map, &pos));
-        chunk_to_be.build()
+        chunk_to_be.build(*chunk_pos)
     }
 }
 

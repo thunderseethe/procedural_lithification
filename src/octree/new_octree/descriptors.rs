@@ -2,8 +2,8 @@
 use super::*;
 use alga::general::{ClosedAdd, ClosedSub, SubsetOf};
 use num_traits::Num;
-use std::ops::{Shl, Shr};
-use typenum::{Bit, PowerOfTwo, Shleft, UInt, Unsigned, B0, B1, U1};
+use std::ops::{Mul, Shl, Shr};
+use typenum::{Bit, Pow, PowerOfTwo, UInt, Unsigned, B0, U1};
 // Hello, it's your good pal bottom up recursion. Now with types
 pub trait ElementType {
     type Element;
@@ -195,6 +195,7 @@ pub trait HasData: ElementType {
     type Data: Leaf<Self::Element> + Empty;
 
     fn data(&self) -> &Self::Data;
+    fn into_data(self) -> Self::Data;
 }
 impl<O> HasData for OctreeLevel<O>
 where
@@ -205,12 +206,18 @@ where
     fn data(&self) -> &Self::Data {
         &self.data
     }
+    fn into_data(self) -> Self::Data {
+        self.data
+    }
 }
 impl<E, N: Scalar> HasData for OctreeBase<E, N> {
     type Data = Option<E>;
 
     fn data(&self) -> &Self::Data {
         &self.data
+    }
+    fn into_data(self) -> Self::Data {
+        self.data
     }
 }
 
@@ -244,5 +251,32 @@ impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
 
     fn position(&self) -> &Self::Position {
         &self.bottom_left
+    }
+}
+
+/// We can move a data type up the tree arbitratily as long as it's not a Node variant.
+//impl<E, N: Number> From<Option<E>> for LevelData<OctreeBase<E, N>> {
+//    fn from(opt: Option<E>) -> Self {
+//        opt.map(LevelData::Leaf).unwrap_or(LevelData::Empty)
+//    }
+//}
+impl<O> From<LevelData<O>> for LevelData<OctreeLevel<O>>
+where
+    O: OctreeTypes,
+{
+    fn from(lower: LevelData<O>) -> Self {
+        match lower {
+            LevelData::Empty => LevelData::Empty,
+            LevelData::Leaf(elem) => LevelData::Leaf(elem),
+            LevelData::Node(nodes) => {
+                panic!("Attempted to convert LevelData::Node from O to OctreeLevel<O>.")
+            }
+        }
+    }
+}
+
+impl<O: OctreeTypes> From<Option<ElementOf<O>>> for LevelData<O> {
+    fn from(opt: Option<ElementOf<O>>) -> Self {
+        opt.map(LevelData::Leaf).unwrap_or(LevelData::Empty)
     }
 }

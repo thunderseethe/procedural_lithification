@@ -23,6 +23,8 @@ pub use descriptors::*;
 pub mod consts;
 pub use consts::{Octree, Octree8};
 
+pub mod builder;
+
 /// Poor man's higher kinded types.
 /// Used to toggle the implementation between Ref and Arc;
 type Ref<T> = Arc<T>;
