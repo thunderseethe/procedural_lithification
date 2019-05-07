@@ -295,11 +295,6 @@ impl<O> OctreeLevel<O>
 where
     O: OctreeTypes + Diameter,
 {
-    /// Convenience method to access diameter from an instance of type
-    pub fn get_diameter(&self) -> usize {
-        Self::diameter()
-    }
-
     fn outside_bounds<P>(&self, pos_ref: P) -> bool
     where
         P: Borrow<<Self as HasPosition>::Position>,
@@ -370,9 +365,6 @@ impl<E: Clone, N: Number> OctreeBase<E, N> {
             data: data,
             ..(*self).clone()
         }
-    }
-    pub fn get_diameter(&self) -> usize {
-        Self::diameter()
     }
 }
 

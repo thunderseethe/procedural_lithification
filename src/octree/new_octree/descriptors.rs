@@ -179,7 +179,7 @@ where
     }
 }
 
-/// This a more specific version of ShL<B1>, with the caveat that is enforces it's Output implements Double
+/// This a more specific version of Shl<B1>, with the caveat that is enforces it's Output implements Double
 /// Because the Output must also implement Double the trait can be recursed as examplified by the Diameter trait
 pub trait Double: PowerOfTwo {
     type Output: Unsigned + Double;
@@ -255,11 +255,6 @@ impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
 }
 
 /// We can move a data type up the tree arbitratily as long as it's not a Node variant.
-//impl<E, N: Number> From<Option<E>> for LevelData<OctreeBase<E, N>> {
-//    fn from(opt: Option<E>) -> Self {
-//        opt.map(LevelData::Leaf).unwrap_or(LevelData::Empty)
-//    }
-//}
 impl<O> From<LevelData<O>> for LevelData<OctreeLevel<O>>
 where
     O: OctreeTypes,
