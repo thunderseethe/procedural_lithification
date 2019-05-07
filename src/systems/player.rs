@@ -8,7 +8,7 @@ use amethyst::{
         specs::{Component, DispatcherBuilder, Join, NullStorage, Resources},
         Time, Transform,
     },
-    ecs::{Entity, Read, ReadExpect, ReadStorage, System, WriteStorage},
+    ecs::{Entity, Read, ReadExpect, ReadStorage, System, WriteStorage, WriteExpect},
     input::{get_input_axis_simple, InputHandler},
     ui::{UiFinder, UiText},
     winit::{DeviceEvent, Event},
@@ -63,13 +63,13 @@ where
 {
     type SystemData = (
         Read<'a, Time>,
-        ReadExpect<'a, Arc<Mutex<CollisionDetection>>>,
+        WriteExpect<'a, CollisionDetection>,
         WriteStorage<'a, Transform>,
         Read<'a, InputHandler<A, B>>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (time, collision, mut transform, input, tag): Self::SystemData) {
+    fn run(&mut self, (time, mut collision, mut transform, input, tag): Self::SystemData) {
         let x = get_input_axis_simple(&self.right_input_axis, &input);
         let y = get_input_axis_simple(&self.up_input_axis, &input);
         let z = get_input_axis_simple(&self.forward_input_axis, &input);
@@ -78,7 +78,6 @@ where
             for (transform, _) in (&mut transform, &tag).join() {
                 transform.move_along_local(direction, time.delta_seconds() * self.speed);
                 collision
-                    .lock()
                     .set_player_pos(Point3::from(*transform.translation()));
             }
         }

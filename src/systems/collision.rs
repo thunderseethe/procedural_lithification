@@ -16,13 +16,12 @@ use std::sync::Arc;
 pub struct CheckPlayerCollisionSystem;
 impl<'a> System<'a> for CheckPlayerCollisionSystem {
     type SystemData = (
-        WriteExpect<'a, Arc<Mutex<CollisionDetection>>>,
+        WriteExpect<'a, CollisionDetection>,
         WriteStorage<'a, Transform>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (collision_mutex, mut transform, tag): Self::SystemData) {
-        let mut collision = collision_mutex.lock();
+    fn run(&mut self, (mut collision, mut transform, tag): Self::SystemData) {
         collision.update();
         for event in collision.proximity_events() {
             println!("{:?}", event);
@@ -42,13 +41,11 @@ impl<'a> System<'a> for ChunkCollisionMangementSystem {
     type SystemData = (
         Read<'a, EventChannel<DimensionChunkEvent>>,
         ReadExpect<'a, Arc<Mutex<Dimension>>>,
-        WriteExpect<'a, Arc<Mutex<CollisionDetection>>>,
+        WriteExpect<'a, CollisionDetection>,
     );
 
     fn setup(&mut self, res: &mut Resources) {
-        Read::<'a, EventChannel<DimensionChunkEvent>>::setup(res);
-        ReadExpect::<'a, Arc<Mutex<Dimension>>>::setup(res);
-        WriteExpect::<'a, Arc<Mutex<CollisionDetection>>>::setup(res);
+        Self::SystemData::setup(res);
         self.reader = Some(
             res.fetch_mut::<EventChannel<DimensionChunkEvent>>()
                 .register_reader(),
@@ -61,7 +58,6 @@ impl<'a> System<'a> for ChunkCollisionMangementSystem {
                 DimensionChunkEvent::NewChunkAt(morton) => {
                     if let Some(chunk_mutex) = dimension.lock().get_chunk(*morton) {
                         collision
-                            .lock()
                             .add_chunk(&chunk_mutex.lock())
                             .unwrap_or_else(|err| {
                                 println!(
