@@ -12,8 +12,9 @@ pub trait Insert: ElementType + HasPosition {
 impl<O> Insert for OctreeLevel<O>
 where
     O: Insert + New + CreateSubNodes + Diameter + HasData + FieldType,
-    DataOf<O>: PartialEq + Clone,
     ElementOf<O>: PartialEq + Clone,
+    DataOf<O>: PartialEq + Clone,
+    DataOf<Self>: From<DataOf<O>>,
     Self: HasPosition<Position = PositionOf<O>>,
     O: HasPosition<Position = Point3<FieldOf<O>>>,
 {

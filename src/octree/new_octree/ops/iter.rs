@@ -6,9 +6,9 @@ where
     O: OctreeTypes + Diameter + HasPosition,
     //&'a O: IntoIterator<Item = Octant<&'a O::Element, &'a O::Position>>,
     &'a O:
-        IntoIterator<Item = Octant<&'a ElementOf<O>, &'a PositionOf<O>>> + Diameter + OctreeTypes,
+        IntoIterator<Item = Octant<&'a ElementOf<O>, &'a Point3<FieldOf<O>>>> + Diameter + OctreeTypes,
 {
-    type Item = Octant<&'a ElementOf<O>, &'a PositionOf<O>>;
+    type Item = Octant<&'a ElementOf<O>, &'a Point3<FieldOf<O>>>;
     type IntoIter = OctantIter<
         Self::Item,
         std::slice::Iter<'a, Ref<O>>,

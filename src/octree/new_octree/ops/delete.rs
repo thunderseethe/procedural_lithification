@@ -12,6 +12,7 @@ where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes + Delete + Clone,
     ElementOf<O>: PartialEq + Clone,
     DataOf<O>: PartialEq + Clone,
+    DataOf<Self>: From<DataOf<O>>,
     Self: HasPosition<Position = PositionOf<O>>,
     O: HasPosition<Position = Point3<FieldOf<O>>>,
 {

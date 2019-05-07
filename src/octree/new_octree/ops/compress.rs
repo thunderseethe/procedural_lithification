@@ -1,5 +1,6 @@
 use crate::octree::new_octree::*;
 use amethyst::core::nalgebra::Scalar;
+use itertools::Itertools;
 
 pub trait Compress {
     fn compress_nodes(self) -> Self;
@@ -8,22 +9,17 @@ impl<O> Compress for OctreeLevel<O>
 where
     O: HasData + OctreeTypes,
     ElementOf<O>: Clone,
-    <O as HasData>::Data: PartialEq,
+    DataOf<O>: PartialEq,
+    DataOf<Self>: From<DataOf<O>>,
 {
     fn compress_nodes(self) -> Self {
         use crate::octree::new_octree::LevelData::*;
         match self.data {
-            Node(ref nodes) => {
+            Node(nodes) => {
                 let mut iter = nodes.iter().map(|node| node.data());
-                if iter.next().map_or(true, |head| iter.all(|ele| head == ele)) {
-                    let head = nodes[0].data();
-                    self.with_data(if head.is_empty() {
-                        LevelData::empty()
-                    } else if head.is_leaf() {
-                        LevelData::leaf(head.get_leaf().clone())
-                    } else {
-                        panic!("Attempted to compress Node(..) node which should be impossible.");
-                    })
+                if iter.all_equal() {
+                    let head = nodes[0].into_data();
+                    self.with_data(head.into())
                 } else {
                     self
                 }

@@ -40,6 +40,7 @@ where
     O: OctreeTypes + HasData + New + Diameter + CreateSubNodes,
     ElementOf<O>: PartialEq + Clone,
     DataOf<O>: PartialEq + Clone,
+    DataOf<Self>: From<DataOf<O>>,
 {
     type SubData = O::Data;
 
