@@ -1,17 +1,19 @@
 use crate::mut_ptr::MultiThreadMutPtr;
 use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
+use alga::general::{SubsetOf, SupersetOf};
 use amethyst::{
-    core::nalgebra::{convert, Point3, Vector2, Vector3},
+    core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
 };
+use num_traits::AsPrimitive;
 use rayon::iter::{plumbing::*, *};
 use std::{borrow::Borrow, sync::Arc};
 
 pub mod block;
 pub mod chunk_builder;
-pub mod mesher;
-pub mod file_format;
 
+pub mod file_format;
+pub mod mesher;
 use block::Block;
 use mesher::Mesher;
 
@@ -60,12 +62,12 @@ impl Chunk {
     }
 
     pub fn generate_mesh(&self) -> Option<Vec<(Point3<f32>, MeshData)>> {
-        let chunk_render_pos: Point3<f32> = convert(self.pos * 256);
+        let chunk_render_pos: Point3<f32> = Chunk::chunk_to_absl_coords(self.pos);
         self.octree.map(
             || None,
             |_| {
                 // Trivial cube
-                let mesh = cube_mesh(256.0).into();
+                let mesh = cube_mesh(self.octree.bounds().diameter() as f32).into();
                 Some(vec![(chunk_render_pos, mesh)])
             },
             |children| {
@@ -126,6 +128,15 @@ impl Chunk {
                 )
             },
         )
+    }
+
+    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<i32>) -> Point3<N>
+    where
+        N: Scalar,
+        i32: AsPrimitive<N>,
+    {
+        let translated = chunk_pos * 256;
+        Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
     }
 
     pub fn iter<'a>(&'a self) -> OctreeIterator<'a, Block> {
