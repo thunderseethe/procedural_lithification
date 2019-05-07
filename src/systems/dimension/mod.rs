@@ -5,6 +5,7 @@ use amethyst::{
         nalgebra::Point3,
         specs::DispatcherBuilder,
     },
+    ecs::{Component, VecStorage},
     renderer::MeshData,
 };
 
@@ -12,10 +13,13 @@ pub mod render_dimension;
 use crate::systems::dimension::render_dimension::RenderDimensionSystem;
 
 pub enum DimensionChunkEvent {
-    GeneratedChunk(Point3<f32>, MeshData),
+    NewChunkAt(MortonCode),
 }
 
 pub struct ChunkTag(MortonCode);
+impl Component for ChunkTag {
+    type Storage = VecStorage<Self>;
+}
 
 pub struct DimensionBundle;
 impl DimensionBundle {

@@ -89,6 +89,13 @@ impl Dimension {
         }
     }
 
+    pub fn get_chunk<M>(&self, morton: M) -> Option<&Mutex<Chunk>>
+    where
+        M: Into<MortonCode>,
+    {
+        self.storage.get(morton)
+    }
+
     pub fn create<P>(&mut self, pos: P)
     where
         P: Borrow<Point3<i32>>,

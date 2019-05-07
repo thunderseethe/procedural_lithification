@@ -29,7 +29,7 @@ use cubes_lib::{
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
         collision::CheckPlayerCollisionSystem,
-        dimension::{DimensionBundle, DimensionChunkEvent},
+        dimension::{DimensionBundle, DimensionChunkEvent, DimensionChunkEvent::NewChunkAt},
         player::{PlayerControlBundle, PlayerControlTag},
     },
     volume::Sphere,
@@ -55,31 +55,21 @@ impl Gameplay {
     pub fn init_dimension(
         &self,
         runtime: &mut Runtime,
-        collision: &mut CollisionDetection,
+        channel: &mut EventChannel<DimensionChunkEvent>,
     ) -> Dimension {
         std::fs::create_dir_all(&self.dimension_config.directory)
             .expect("Unable to create dimension directory");
         let mut dimension = Dimension::default();
-        //for point in Sphere::with_origin(4).into_iter() {
-        //    dimension
-        //        ._create_or_load_chunk(
-        //            self.dimension_config.directory.as_path(),
-        //            MortonCode::from(&point),
-        //            point,
-        //        )
-        //        .expect(&format!("Failed to create intial chunk at {:?}", point));
-        //}
         {
+            let morton = MortonCode::from_raw(0);
             let chunk = dimension
                 ._create_or_load_chunk(
                     self.dimension_config.directory.as_path(),
-                    MortonCode::from_raw(0),
+                    morton,
                     Point3::origin(),
                 )
                 .expect("Failed to generate chunk at origin");
-            collision
-                .add_chunk(&chunk)
-                .expect("Chunk at origin already present");
+            channel.single_write(DimensionChunkEvent::NewChunkAt(morton));
         }
         dimension.store(self.dimension_config.directory.as_path(), runtime);
         dimension
@@ -171,14 +161,14 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             .with(PlayerControlTag::default())
             .build();
 
-        let mut collision = CollisionDetection::new(player_pos);
         let dimension = {
             let mut runtime = world.write_resource::<Runtime>();
-            self.init_dimension(&mut runtime, &mut collision)
+            let mut chunk_channel = world.write_resource::<EventChannel<DimensionChunkEvent>>();
+            self.init_dimension(&mut runtime, &mut chunk_channel)
         };
         world.add_resource(Arc::new(Mutex::new(dimension)));
-        world.add_resource(Arc::new(Mutex::new(collision)));
-        Gameplay::render_initial_dimension(&mut world);
+        world.add_resource(CollisionDetection::new(player_pos));
+        //Gameplay::render_initial_dimension(&mut world);
         println!("Rendered Initial Dimension");
 
         world.exec(|mut creator: UiCreator<'_>| {
@@ -236,16 +226,12 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             let player_chunk = Gameplay::convert_to_chunk_coord(transform.translation());
             let thread_pool = data.world.read_resource::<ArcThreadPool>().clone();
             let dimension = data.world.write_resource::<Arc<Mutex<Dimension>>>();
-            let collision = data
-                .world
-                .write_resource::<Arc<Mutex<CollisionDetection>>>();
             let channel = Arc::new(Mutex::new(
                 data.world
                     .write_resource::<EventChannel<DimensionChunkEvent>>(),
             ));
             thread_pool.scope(|s| {
                 let dimension_ref = &dimension;
-                let collision_ref = &collision;
                 let generate_queue_set_ref = &self.generate_queue_set;
                 let channel_ref = &channel;
                 let dimension_dir = self.dimension_config.directory.as_path();
@@ -253,7 +239,6 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
                     .into_iter()
                 {
                     s.spawn(move |_| {
-                        let collision = Arc::clone(collision_ref);
                         let dimension = Arc::clone(dimension_ref);
                         let generate_queue_set = Arc::clone(generate_queue_set_ref);
                         let channel = Arc::clone(channel_ref);
@@ -263,26 +248,12 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
                         {
                             println!("Generating chunk for {:?}", point);
                             generate_queue_set.lock().insert(morton);
-                            if let Ok(chunk) =
+                            if let Ok(_) =
                                 dimension
                                     .lock()
                                     ._create_or_load_chunk(dimension_dir, morton, point)
                             {
-                                collision.lock().add_chunk(&chunk).unwrap_or_else(
-                                    |err| match err {
-                                        CollisionDetectionError::ChunkAlreadyPresent => println!(
-                                            "Chunk already loading into collision detection {}",
-                                            point
-                                        ),
-                                    },
-                                );
-                                chunk.generate_mesh().map(|chunk_render_info| {
-                                    channel.lock().iter_write(chunk_render_info.into_iter().map(
-                                        |(point, mesh_data)| {
-                                            DimensionChunkEvent::GeneratedChunk(point, mesh_data)
-                                        },
-                                    ))
-                                });
+                                channel.lock().single_write(NewChunkAt(morton));
                                 generate_queue_set.lock().remove(&morton);
                             }
                         }
