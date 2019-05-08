@@ -5,91 +5,10 @@ use itertools::Itertools;
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 
-trait RawTreeSize: ElementType + Diameter
-where
-    Self::Element: Clone,
-{
-    fn raw_tree() -> RawTree<Self::Element> {
-        RawTree(vec![None; usize::pow(Self::diameter(), 3)])
-    }
-}
-impl<T> RawTreeSize for T
-where
-    T: ElementType + Diameter,
-    ElementOf<T>: Clone,
-{
-}
-
-struct RawTree<E>(Vec<Option<E>>);
-
-impl<'data, E: Send> IntoParallelIterator for &'data mut RawTree<E> {
-    type Item = &'data mut Option<E>;
-    type Iter = LeavesIterMut<'data, E>;
-
-    fn into_par_iter(self) -> Self::Iter {
-        let len = self.0.len();
-        LeavesIterMut {
-            slice: &mut self.0[..],
-            len,
-        }
-    }
-}
-
-struct LeavesIterMut<'data, E> {
-    slice: &'data mut [Option<E>],
-    len: usize,
-}
-impl<'data, E: Send> ParallelIterator for LeavesIterMut<'data, E> {
-    type Item = &'data mut Option<E>;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-}
-impl<'data, E: Send> IndexedParallelIterator for LeavesIterMut<'data, E> {
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    fn drive<C>(self, consumer: C) -> C::Result
-    where
-        C: Consumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-
-    fn with_producer<CB>(self, callback: CB) -> CB::Output
-    where
-        CB: ProducerCallback<Self::Item>,
-    {
-        callback.callback(SliceProducer { slice: self.slice })
-    }
-}
-
-struct SliceProducer<'a, T> {
-    slice: &'a mut [T],
-}
-impl<'a, T: Send> Producer for SliceProducer<'a, T> {
-    type Item = &'a mut T;
-    type IntoIter = std::slice::IterMut<'a, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.slice.iter_mut()
-    }
-
-    fn split_at(self, index: usize) -> (Self, Self) {
-        let (left, right) = self.slice.split_at_mut(index);
-        (
-            SliceProducer { slice: left },
-            SliceProducer { slice: right },
-        )
-    }
-}
-
+/// Construct an Octree from a flat array of leaves.
 pub trait FromRawTree: ElementType + Sized {
+    // We return an either to essentially constructing a tree until we actually have 8 different children.
+    // This avoids allocating (A)Rcs that immediately get deallocated which is slow
     fn build_octree(
         data: &[Option<Self::Element>],
         morton_raw: usize,
@@ -232,5 +151,90 @@ where
                 )
             })
             .into_inner()
+    }
+}
+
+/// Determines the size of Vector that will hold all possbile base leaves of Self
+/// This will be Self::diamter() ^ 3 for anything with a diameter.
+trait RawTreeSize: ElementType + Diameter
+where
+    Self::Element: Clone,
+{
+    fn raw_tree() -> RawTree<Self::Element> {
+        RawTree(vec![None; usize::pow(Self::diameter(), 3)])
+    }
+}
+impl<T> RawTreeSize for T
+where
+    T: ElementType + Diameter,
+    ElementOf<T>: Clone,
+{
+}
+
+struct RawTree<E>(Vec<Option<E>>);
+impl<'data, E: Send> IntoParallelIterator for &'data mut RawTree<E> {
+    type Item = &'data mut Option<E>;
+    type Iter = LeavesIterMut<'data, E>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        let len = self.0.len();
+        LeavesIterMut {
+            slice: &mut self.0[..],
+            len,
+        }
+    }
+}
+
+struct LeavesIterMut<'data, E> {
+    slice: &'data mut [Option<E>],
+    len: usize,
+}
+impl<'data, E: Send> ParallelIterator for LeavesIterMut<'data, E> {
+    type Item = &'data mut Option<E>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: UnindexedConsumer<Self::Item>,
+    {
+        bridge(self, consumer)
+    }
+}
+impl<'data, E: Send> IndexedParallelIterator for LeavesIterMut<'data, E> {
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn drive<C>(self, consumer: C) -> C::Result
+    where
+        C: Consumer<Self::Item>,
+    {
+        bridge(self, consumer)
+    }
+
+    fn with_producer<CB>(self, callback: CB) -> CB::Output
+    where
+        CB: ProducerCallback<Self::Item>,
+    {
+        callback.callback(SliceProducer { slice: self.slice })
+    }
+}
+
+struct SliceProducer<'a, T> {
+    slice: &'a mut [T],
+}
+impl<'a, T: Send> Producer for SliceProducer<'a, T> {
+    type Item = &'a mut T;
+    type IntoIter = std::slice::IterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.slice.iter_mut()
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left, right) = self.slice.split_at_mut(index);
+        (
+            SliceProducer { slice: left },
+            SliceProducer { slice: right },
+        )
     }
 }
