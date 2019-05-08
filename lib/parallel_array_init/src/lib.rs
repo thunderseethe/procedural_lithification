@@ -1,9 +1,7 @@
 extern crate array_init;
-extern crate nodrop;
 extern crate rayon;
 
 use array_init::IsArray;
-use nodrop::NoDrop;
 use rayon::prelude::*;
 
 struct MutPtr<T>(*mut T);

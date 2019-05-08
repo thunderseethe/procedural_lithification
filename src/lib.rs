@@ -13,6 +13,7 @@ extern crate flate2;
 extern crate ncollide3d;
 extern crate noise;
 extern crate num_traits;
+extern crate parallel_array_init;
 extern crate parking_lot;
 extern crate rand;
 extern crate rayon;

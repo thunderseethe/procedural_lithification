@@ -7,4 +7,3 @@ edition = "2018"
 [dependencies]
 array-init = "0.0.4"
 rayon = "1.0.3"
-nodrop = "0.1"
