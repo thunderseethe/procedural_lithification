@@ -66,7 +66,7 @@ impl CollisionDetection {
         if self.terrain_handles.contains_key(&chunk.pos) {
             return Err(CollisionDetectionError::ChunkAlreadyPresent);
         }
-        let root = chunk.pos * 256;
+        let root = Chunk::chunk_to_absl_coords(chunk.pos);
         let terrain_handles = chunk
             .iter()
             .map(|(dimensions, _)| {

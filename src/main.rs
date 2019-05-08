@@ -25,6 +25,7 @@ use amethyst::{
     utils::application_root_dir,
 };
 use cubes_lib::{
+    chunk::Chunk,
     collision::{CollisionDetection, CollisionDetectionError},
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
@@ -124,12 +125,12 @@ impl Gameplay {
         }
     }
 
-    fn convert_to_chunk_coord(vec: &Vector3<f32>) -> Point3<i32> {
-        let x = (vec.x / 256.0).floor() as i32;
-        let y = (vec.y / 256.0).floor() as i32;
-        let z = (vec.z / 256.0).floor() as i32;
-        Point3::new(x, y, z)
-    }
+    //fn convert_to_chunk_coord(vec: &Vector3<f32>) -> Point3<i32> {
+    //    let x = (vec.x / 256.0).floor() as i32;
+    //    let y = (vec.y / 256.0).floor() as i32;
+    //    let z = (vec.z / 256.0).floor() as i32;
+    //    Point3::new(x, y, z)
+    //}
 }
 
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
@@ -168,8 +169,6 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
         };
         world.add_resource(Arc::new(Mutex::new(dimension)));
         world.add_resource(CollisionDetection::new(player_pos));
-        //Gameplay::render_initial_dimension(&mut world);
-        println!("Rendered Initial Dimension");
 
         world.exec(|mut creator: UiCreator<'_>| {
             creator.create("ui/position.ron", ());
@@ -223,7 +222,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
         )
             .join()
         {
-            let player_chunk = Gameplay::convert_to_chunk_coord(transform.translation());
+            let player_chunk = Chunk::absl_to_chunk_coords(Point3::from(*transform.translation()));
             let thread_pool = data.world.read_resource::<ArcThreadPool>().clone();
             let dimension = data.world.write_resource::<Arc<Mutex<Dimension>>>();
             let channel = Arc::new(Mutex::new(

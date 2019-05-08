@@ -94,6 +94,7 @@ where
 
     #[inline]
     fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
+        // TODO: generalize this over Octree::Diameter once new_octree lands
         array_init::array_init(|x| {
             array_init::array_init(|z| {
                 let nx = (chunk_pos.x as f64) + ((x as f64 / 256.0) - 0.5);

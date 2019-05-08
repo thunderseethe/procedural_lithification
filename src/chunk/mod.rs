@@ -1,11 +1,11 @@
 use crate::mut_ptr::MultiThreadMutPtr;
 use crate::octree::{octant_dimensions::*, octree_data::OctreeData, *};
-use alga::general::{SubsetOf, SupersetOf};
+use alga::general::ClosedDiv;
 use amethyst::{
     core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
 };
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, NumCast};
 use rayon::iter::{plumbing::*, *};
 use std::{borrow::Borrow, sync::Arc};
 
@@ -137,6 +137,18 @@ impl Chunk {
     {
         let translated = chunk_pos * 256;
         Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
+    }
+
+    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<i32>
+    where
+        N: Scalar + ClosedDiv + AsPrimitive<i32> + NumCast,
+    {
+        let n256 = N::from(256).unwrap();
+        Point3::new(
+            (absl_pos.x / n256).as_(),
+            (absl_pos.y / n256).as_(),
+            (absl_pos.z / n256).as_(),
+        )
     }
 
     pub fn iter<'a>(&'a self) -> OctreeIterator<'a, Block> {
