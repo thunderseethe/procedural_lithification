@@ -12,6 +12,7 @@ where
     DataOf<O>: PartialEq,
     DataOf<Self>: From<DataOf<O>>,
 {
+    /// Checks the children of OctreeLevel and combines them into a Leaf or Empty node if they are all equal
     fn compress_nodes(self) -> Self {
         use crate::octree::new_octree::LevelData::*;
         match self.data {
@@ -29,7 +30,7 @@ where
     }
 }
 impl<E, N: Scalar> Compress for OctreeBase<E, N> {
-    // Compress is the identity function for BaseNodes
+    /// compress_nodes() is the identity function for OctreeBase
     fn compress_nodes(self) -> Self {
         self
     }

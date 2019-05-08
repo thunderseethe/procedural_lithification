@@ -3,6 +3,7 @@ use crate::octree::new_octree::{Diameter, OctreeBase, OctreeLevel, PositionOf};
 use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
 
+/// Retrieve an element from the Octree
 pub trait Get: ElementType + HasPosition {
     fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where

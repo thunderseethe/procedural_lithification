@@ -1,10 +1,11 @@
-/// Contains traits that describe properties of an Octree.
+//! Contains traits that describe properties of an Octree and it's data.
 use super::*;
 use alga::general::{ClosedAdd, ClosedSub, SubsetOf};
 use num_traits::Num;
 use std::ops::{Mul, Shl, Shr};
 use typenum::{Bit, Pow, PowerOfTwo, UInt, Unsigned, B0, U1};
 // Hello, it's your good pal bottom up recursion. Now with types
+
 pub trait ElementType {
     type Element;
 }
@@ -38,7 +39,8 @@ impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
     type Field = O::Field;
 }
 
-// Convenience wrapper to avoid busting my + key
+/// ElementType and FieldType are used to carry the two type parameters E and N of OctreeBase<E, N> up each OctreeLevel.
+/// This prevents each octree from requiring it's own E and N parameters and ensures that all levels of the Octree are using the same Element and Field.
 pub trait OctreeTypes: ElementType + FieldType {}
 impl<T> OctreeTypes for T where T: ElementType + FieldType {}
 
@@ -69,6 +71,8 @@ impl<T> Number for T where
 }
 
 /// Trait to unify our OctreeBase::Data and OctreeLevel::Data empty nodes.
+/// This trait in tandem with (Leaf)[trait.Leaf.html] allows for operations on the Octree to refer to their particular type's Data generically
+/// Often a method won't have access to LevelData or Option specifically since it is dealing with an opaque type parameter O. However if we constrain O to implement [HasData](trait.HasData.html) then we can construct an instance of it's data via Empty::empty() or Leaf::leaf()
 pub trait Empty {
     fn empty() -> Self;
     fn is_empty(&self) -> bool;
@@ -140,6 +144,10 @@ impl<E> Leaf<E> for Option<E> {
     }
 }
 
+/// Tracks the diameter of octant that our Self type covers
+/// Like OctreeTypes this is using bottom up recursion.
+/// OctreeBase starts at 1 (as it only covers a single element)
+/// Each OctreeLevel on top of this doubles it's sub octrees diameter
 pub trait Diameter {
     type Diameter: Unsigned + Double;
     fn diameter() -> usize;
@@ -191,6 +199,8 @@ where
     type Output = UInt<Self, B0>;
 }
 
+/// Trait for the Data of an Octree
+/// Provides accessor methods to Data as well as enforces that the data is Leaf-like and Empty-like
 pub trait HasData: ElementType {
     type Data: Leaf<Self::Element> + Empty;
 
@@ -221,6 +231,7 @@ impl<E, N: Scalar> HasData for OctreeBase<E, N> {
     }
 }
 
+/// Trait for the Position of an Octree
 pub trait HasPosition {
     type Position;
 
@@ -255,6 +266,9 @@ impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
 }
 
 /// We can move a data type up the tree arbitratily as long as it's not a Node variant.
+/// This is helpful when building an Octree and when compressing an Octree.
+/// During these operations we want to unify elements of are sub octree that are all equal into one element of our parent octree.
+/// The easiest way to accomplish this is with a recast as done here
 impl<O> From<LevelData<O>> for LevelData<OctreeLevel<O>>
 where
     O: OctreeTypes,
@@ -263,6 +277,8 @@ where
         match lower {
             LevelData::Empty => LevelData::Empty,
             LevelData::Leaf(elem) => LevelData::Leaf(elem),
+            // Since each node _should_ have a different position this case should never come up.
+            // If it does more than likely an Octree invariant has been invalidated.
             LevelData::Node(nodes) => {
                 panic!("Attempted to convert LevelData::Node from O to OctreeLevel<O>.")
             }
@@ -270,6 +286,7 @@ where
     }
 }
 
+/// This tranformation is always safe since OctreeBase::Data is a subset of OctreeLevel::Data
 impl<O: OctreeTypes> From<Option<ElementOf<O>>> for LevelData<O> {
     fn from(opt: Option<ElementOf<O>>) -> Self {
         opt.map(LevelData::Leaf).unwrap_or(LevelData::Empty)

@@ -3,6 +3,7 @@ use crate::octree::new_octree::*;
 use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
 
+/// Insert a new value of type Self::Element into the Octree.
 pub trait Insert: ElementType + HasPosition {
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where

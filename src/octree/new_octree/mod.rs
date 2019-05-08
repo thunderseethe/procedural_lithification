@@ -1,8 +1,7 @@
 /// Module contains two structs, OctreeBase and OctreeLevel.
-/// These can be combined to form an Octree of a static height.
+/// These can be combined recursively to form an Octree of a static height.
 /// For example an Octree of height 3 would have type OctreeLevel<OctreeLevel<OctreeBase<E, N>>>.
-/// This relatively verbose but allows the rust compiler to optimize our Trees recursive methods much better than more traditional unbounded recursion.
-/// A lof of the boilerplat can be alleviated by the use of type aliases.
+/// This is relatively verbose but allows the rust compiler to optimize our octrees recursive methods better than general unbounded recursion.
 use super::octant::{Octant, OctantId};
 use super::octant_dimensions::OctantDimensions;
 use amethyst::core::nalgebra::{Point3, Scalar};
@@ -34,6 +33,8 @@ pub type PositionOf<T> = <T as HasPosition>::Position;
 pub type ElementOf<T> = <T as ElementType>::Element;
 pub type FieldOf<T> = <T as FieldType>::Field;
 
+/// Composite trait to describe the full functionality of an Octree
+/// This trait exists mostly for convenience when parametizing over an Octree
 pub trait OctreeLike: New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes {}
 impl<'a, T: 'a> OctreeLike for T
 where
@@ -42,7 +43,7 @@ where
 {
 }
 
-/// Data for a single level of an Octree.
+/// Data for a single non-temrminal level of an Octree.
 #[derive(Deserialize, Serialize)]
 pub enum LevelData<O>
 where
@@ -52,6 +53,8 @@ where
     Leaf(O::Element),
     Empty,
 }
+
+// Rustc does not handle deriving traits for Associated types well so we much implement some foundation traits ourself.
 impl<O> fmt::Debug for LevelData<O>
 where
     O: OctreeTypes + fmt::Debug,
@@ -102,12 +105,13 @@ where
 {
 }
 
-/// Node struct for level of an Octree.
+/// Node struct for a level of an Octree.
 pub struct OctreeLevel<O>
 where
     O: OctreeTypes,
 {
     data: LevelData<O>,
+    /// The root point of this octree which will be used with diameter to determine position of each suboctant
     bottom_left: Point3<O::Field>,
 }
 impl<O> Serialize for OctreeLevel<O>
@@ -245,10 +249,15 @@ where
     }
 }
 
-/// Base of the Octree. This level can only contain Leaf nodes
+/// Represents termination of the recursive Octree type.
+/// Only allows for Leaf nodes since we are at the bottom of the tree.
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct OctreeBase<E, N: Scalar> {
+    /// Since we have no Node variant here our type is isomorphic to Option.
+    /// Because of this an Option is used in place of a custom type as Option has far more support by default.
     data: Option<E>,
+    /// Since we're at the base of the tree we no longer have octants.
+    /// This point represents the point our data E is at in the tree.
     bottom_left: Point3<N>,
 }
 impl<E: Clone, N: Number> Clone for OctreeBase<E, N> {
@@ -261,6 +270,8 @@ impl<O> OctreeLevel<O>
 where
     O: Diameter + OctreeTypes,
 {
+    /// Convenience wrapper to convert the output of [get_octant](struct.OctreeLevel.html#get_octant) to a usize
+    /// This is a safe transformation since [OctantId](enum.OctantId.html) is always within `0..8`
     fn get_octant_index<P>(&self, pos: P) -> usize
     where
         P: Borrow<<Self as HasPosition>::Position>,
@@ -268,6 +279,9 @@ where
         self.get_octant(pos).to_usize().unwrap()
     }
 
+    /// Determines the sub octant of `self`  that `pos_ref` resides in.
+    /// Returns the OctantId specifying that Octant.
+    /// This method assumes `pos_ref` is within the boundaries of `self` and does no bounds checking.
     fn get_octant<P>(&self, pos_ref: P) -> OctantId
     where
         P: Borrow<<Self as HasPosition>::Position>,
@@ -311,6 +325,7 @@ where
 }
 // This is the least restrictive impl for our OctreeLevel so most of our helper methods live here
 impl<O: OctreeTypes> OctreeLevel<O> {
+    /// Create a new Octree at `Point3::<FieldOf<Self>>::(0, 0, 0)`
     pub fn at_origin(init: Option<ElementOf<Self>>) -> Self {
         let data: DataOf<Self> = init
             .map(<Self as HasData>::Data::leaf)
@@ -325,6 +340,13 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         }
     }
 
+    /// Returns the root point of this node of the Octree.
+    /// For example:
+    ///
+    /// ```
+    /// let octree: Octree8<u32, u8> = Octree8::at_origin(None);
+    /// assert_eq!(octree.root_point(), Point3::origin())
+    /// ```
     pub fn root_point(&self) -> &<Self as HasPosition>::Position {
         &self.bottom_left
     }
@@ -345,6 +367,22 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         }
     }
 
+    /// Maps over a single level of the Octree using 3 functions to handle each possible case.
+    /// This should not be confused with the more traditional concept of map from Functor.
+    /// To accomplish something like that use `&octree.into_iter().map(...)`
+    ///
+    /// Example usage:
+    ///
+    /// ```
+    /// let octree = Octree::<u32, u8, U64>::at_origin(None);
+    ///
+    /// let number_of_leaves = octree.map(
+    ///     || 0,
+    ///     |leaf_elem| 1,
+    ///     |node_children| 8,
+    /// );
+    /// assert_eq!(number_of_leaves, 0);
+    /// ```
     pub fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
     where
         EFn: FnOnce() -> Output,

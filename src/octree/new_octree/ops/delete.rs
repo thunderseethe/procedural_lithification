@@ -1,6 +1,7 @@
 use crate::octree::new_octree::*;
 use std::borrow::Borrow;
 
+/// Delete an element from the Octree.
 pub trait Delete: HasPosition {
     fn delete<P>(&self, pos: P) -> Self
     where
