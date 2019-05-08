@@ -118,7 +118,7 @@ where
                     )
             };
             for p in Cuboid::new(bottom_left, top_right).into_iter() {
-                chunk[self.to_index(p.x, p.y, p.z)] = Some(*octant.data);
+                chunk[self.to_index(p.x, p.y, p.z)] = Some(octant.data.clone());
             }
         });
         let mut x: Point3<i32> = Point3::origin();
@@ -136,10 +136,10 @@ where
 
                         let front_face = as_option(0 <= dimension_cursor)
                             .and_then(|_| try_convert(x))
-                            .and_then(|p: Point3<u8>| chunk[self.to_index(p.x, p.y, p.z)]);
+                            .and_then(|p: Point3<u8>| chunk[self.to_index(p.x, p.y, p.z)].clone());
                         let back_face = as_option(dimension_cursor < size_iter - 1)
                             .and_then(|_| try_convert(x + q.as_ref()))
-                            .and_then(|p: Point3<u8>| chunk[self.to_index(p.x, p.y, p.z)]);
+                            .and_then(|p: Point3<u8>| chunk[self.to_index(p.x, p.y, p.z)].clone());
                         mask[n] = option_xor(
                             front_face.map(|block| (block, false)),
                             back_face.map(|block| (block, true)),
@@ -163,7 +163,7 @@ where
                             self.size - j as usize,
                         );
 
-                        let (block, is_back_face) = mask[n].unwrap();
+                        let (block, is_back_face) = mask[n].clone().unwrap();
                         x[d.index()] = dimension_cursor + 1;
                         x[u.index()] = i as i32;
                         x[v.index()] = j as i32;

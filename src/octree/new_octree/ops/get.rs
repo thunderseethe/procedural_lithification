@@ -14,6 +14,7 @@ where
     O: Get + Diameter + FieldType,
     Self: HasPosition<Position = PositionOf<O>>,
 {
+    #[inline]
     fn get<P>(&self, pos: P) -> Option<&Self::Element>
     where
         P: Borrow<PositionOf<Self>>,
@@ -33,6 +34,7 @@ impl<E, N> Get for OctreeBase<E, N>
 where
     N: Number,
 {
+    #[inline]
     fn get<P>(&self, _pos: P) -> Option<&E>
     where
         P: Borrow<PositionOf<Self>>,

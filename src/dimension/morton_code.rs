@@ -263,7 +263,9 @@ mod test {
     fn test_morton_encoding_against_control() {
         let field_bits = 32 / 3;
         let monstrosity = (0..=(field_bits - 4)).flat_map(|offset| {
-            (0..16).flat_map(|i| (0..16).flat_map(|j| (0..16).map(|k| (offset, i, j, k))))
+            (0..16).flat_map(move |i| {
+                (0..16).flat_map(move |j| (0..16).map(move |k| (offset, i, j, k)))
+            })
         });
         for (offset, i, j, k) in monstrosity {
             let x: i32 = i << offset;
@@ -284,8 +286,8 @@ mod test {
     #[test]
     fn test_morton_decoding_against_control() {
         let encoded_bits = (64 / 3) * 3;
-        let product =
-            (0..=(encoded_bits - 12)).flat_map(|offset| (0..4096).map(|morton| (offset, morton)));
+        let product = (0..=(encoded_bits - 12))
+            .flat_map(|offset| (0..4096).map(move |morton| (offset, morton)));
         for (offset, morton) in product {
             let encoded = morton << offset;
             let expected = control_decode_impl(encoded);

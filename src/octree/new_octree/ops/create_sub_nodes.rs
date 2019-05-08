@@ -27,6 +27,8 @@ pub trait CreateSubNodes: OctreeTypes {
 impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     /// We can't subdivide OctreeBase so it's SubData is unit
     type SubData = ();
+
+    #[inline]
     fn create_sub_nodes<P>(&self, pos: P, elem: Option<Self::Element>, default: ()) -> Self
     where
         P: Borrow<Point3<FieldOf<Self>>>,
@@ -35,6 +37,7 @@ impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     }
 
     /// There is no more recursion to be done so we return a copy of our node with updated data
+    #[inline]
     fn place<P>(&self, _pos: P, data: Option<Self::Element>) -> Self {
         self.with_data(data)
     }
@@ -49,6 +52,7 @@ where
 {
     type SubData = O::Data;
 
+    #[inline]
     fn create_sub_nodes<P>(
         &self,
         pos: P,
@@ -76,6 +80,7 @@ where
         self.with_data(Node(octree_nodes)).compress_nodes()
     }
 
+    #[inline]
     fn place<P>(&self, pos: P, data: Option<ElementOf<O>>) -> Self
     where
         P: Borrow<Point3<FieldOf<O>>>,

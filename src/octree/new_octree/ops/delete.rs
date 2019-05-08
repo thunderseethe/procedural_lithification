@@ -17,6 +17,7 @@ where
     Self: HasPosition<Position = PositionOf<O>>,
     O: HasPosition<Position = Point3<FieldOf<O>>>,
 {
+    #[inline]
     fn delete<P>(&self, pos: P) -> Self
     where
         P: Borrow<PositionOf<Self>>,
@@ -37,6 +38,7 @@ where
 }
 
 impl<E: Clone, N: Number> Delete for OctreeBase<E, N> {
+    #[inline]
     fn delete<P>(&self, _pos: P) -> Self
     where
         P: Borrow<Point3<N>>,
