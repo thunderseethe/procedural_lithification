@@ -1,0 +1,10 @@
+[package]
+name = "parallel_array_init"
+version = "0.1.0"
+authors = ["thunderseethe <thunderseethe.dev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+array-init = "0.0.4"
+rayon = "1.0.3"
+nodrop = "0.1"
