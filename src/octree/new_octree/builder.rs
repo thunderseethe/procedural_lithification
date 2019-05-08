@@ -19,6 +19,7 @@ impl<E, N: Number> FromRawTree for OctreeBase<E, N>
 where
     E: Copy,
 {
+    // All our "children" are the same here so we always return Left with our datum.
     fn build_octree(data: &[Option<E>], _morton_raw: usize) -> Either<Option<E>, Self> {
         Either::Left(data[0])
     }
@@ -34,24 +35,28 @@ where
         data: &[Option<ElementOf<O>>],
         morton_raw: usize,
     ) -> Either<Option<ElementOf<O>>, Self> {
+        // Segment size is the volume of the cube our octant covers
         let segment_size = usize::pow(Self::diameter(), 3);
-        let childrens: [Either<Option<ElementOf<O>>, O>; 8] = array_init::array_init(|i| {
+        // Determine slice of the leaves for each child and recurse into their build_octree() method
+        let childrens = (0..8).map(|i| {
             let start = i * segment_size;
             let end = (i + 1) * segment_size;
             O::build_octree(&data[start..end], morton_raw + start)
         });
-        if childrens.iter().all_equal() {
-            childrens[0].clone().map_right(|lower| {
+        // If all our children are equal we don't want to construct an octree and instead defer up the call stack
+        if childrens.clone().all_equal() {
+            childrens.next().unwrap().map_right(|lower| {
+                // This code generally won't be run but in the case we have 8 equal Either::Rights combine there data to construct an Octree that's one level higher
                 Self::new(
                     lower.into_data().into(),
                     MortonCode::from_raw(morton_raw as u64).as_point().unwrap(),
                 )
             })
         } else {
-            let childs: [Ref<O>; 8] = array_init::array_init(|i| {
+            // Here our children we're different so we have to construct a new octree
+            let childs: [Ref<O>; 8] = array_init::from_iter(childrens.map(|either| {
                 Ref::new(
-                    childrens[i]
-                        .clone()
+                    either
                         .map_left(|option_e| {
                             O::new(
                                 option_e
@@ -64,7 +69,8 @@ where
                         })
                         .into_inner(),
                 )
-            });
+            }))
+            .expect("Failed to construct array from children iterator in build_octree");
             let point = MortonCode::from_raw(morton_raw as u64).as_point().unwrap();
             let octree = Self::new(LevelData::Node(childs), point);
             Either::Right(octree)
@@ -72,6 +78,8 @@ where
     }
 }
 
+/// Behavior of a type that can be built
+/// Includes convenience method create_builder() which makes a builder from an instance of type instead of statically referencing type.
 pub trait Builder {
     type Builder;
 
@@ -114,6 +122,7 @@ pub struct OctreeBuilder<Octree: ElementType> {
     _marker: std::marker::PhantomData<Octree>,
 }
 
+/// Iteration over an OctreeBuilder defers to LeavesIterMut to handle iterating over the actual array and converts array index to a point via MortonCode
 impl<'a, Octree> IntoParallelIterator for &'a mut OctreeBuilder<Octree>
 where
     Octree: OctreeTypes,
@@ -144,6 +153,8 @@ where
     pub fn build(self) -> Octree {
         Octree::build_octree(&self.data.0[..], 0)
             .map_left(|option_elem| {
+                // If by some act of god we still have a Left at the end of this shit we can build a tree of a single Leaf or Empty node
+                // If this code gets run be thankful for the blessings the heavens have bestowed upon you.
                 Octree::new(
                     <Octree as HasData>::Data::from(option_elem),
                     Point3::origin(),
