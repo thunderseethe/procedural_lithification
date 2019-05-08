@@ -1,6 +1,6 @@
 use super::new_octree::descriptors::{Diameter, HasData, HasPosition};
 use super::octant_dimensions::OctantDimensions;
-use alga::general::ClosedAdd;
+use alga::general::{ClosedAdd, SubsetOf, SupersetOf};
 use amethyst::core::nalgebra::{convert, Point3, Scalar, Vector3};
 use num_traits::{AsPrimitive, FromPrimitive};
 use std::borrow::Borrow;
@@ -135,9 +135,16 @@ impl<E, P> Octant<E, P> {
     }
 }
 
-impl<'a, E, N: Scalar + ClosedAdd> Octant<E, &'a Point3<N>> {
+impl<'a, E, N> Octant<E, &'a Point3<N>>
+where
+    N: Scalar + ClosedAdd + AsPrimitive<usize>,
+{
     pub fn top_right(&self) -> Point3<usize> {
-        convert(self.bottom_left_front) + Vector3::new(self.diameter, self.diameter, self.diameter)
+        Point3::new(
+            self.bottom_left_front.x.as_() + self.diameter,
+            self.bottom_left_front.y.as_() + self.diameter,
+            self.bottom_left_front.z.as_() + self.diameter,
+        )
     }
 }
 

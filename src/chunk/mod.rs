@@ -5,7 +5,8 @@ use amethyst::{
     renderer::{MeshData, PosNormTex},
 };
 use rayon::iter::{plumbing::*, *};
-use std::{borrow::Borrow, sync::Arc};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::borrow::Borrow;
 
 pub mod block;
 pub mod chunk_builder;
@@ -15,7 +16,7 @@ pub mod mesher;
 use block::Block;
 use mesher::Mesher;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Chunk {
     pub pos: Point3<i32>,
     octree: OctreeOf<Self>,
@@ -137,85 +138,76 @@ impl Chunk {
     }
 }
 
-macro_rules! node_index {
-    ($node:expr, $i:expr) => {
-        unsafe { $node.0.add($i).as_mut().unwrap() }
-    };
-}
+impl<'de> Deserialize<'de> for Chunk
+where
+    OctreeOf<Chunk>: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::*;
+        use std::fmt;
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Pos,
+            Octree,
+        }
 
-//pub fn parallel_drive_mut_node_children<'a, ITEM, E, C, F>(
-//    nodes: &'a mut [Arc<Octree<E>>; 8],
-//    consumer: C,
-//    handle_child: F,
-//) -> C::Result
-//where
-//    E: Send + Sync,
-//    C: UnindexedConsumer<ITEM>,
-//    F: Fn(&'a mut Arc<Octree<E>>, C) -> C::Result + Send + Sync,
-//{
-//    let nodes_ptr = MultiThreadMutPtr::new(nodes.as_mut_ptr());
-//    let reducer = consumer.to_reducer();
-//    let (left_half, right_half) = (consumer.split_off_left(), consumer);
-//    let (ll_quarter, lr_quarter, rl_quarter, rr_quarter) = (
-//        left_half.split_off_left(),
-//        left_half,
-//        right_half.split_off_left(),
-//        right_half,
-//    );
-//    let (lll_octet, llr_octet, lrl_octet, lrr_octet, rll_octet, rlr_octet, rrl_octet, rrr_octet) = (
-//        ll_quarter.split_off_left(),
-//        ll_quarter,
-//        lr_quarter.split_off_left(),
-//        lr_quarter,
-//        rl_quarter.split_off_left(),
-//        rl_quarter,
-//        rr_quarter.split_off_left(),
-//        rr_quarter,
-//    );
-//    let (left, right) = rayon::join(
-//        || {
-//            let reducer = lll_octet.to_reducer();
-//            let (left, right) = rayon::join(
-//                || {
-//                    let r = lll_octet.to_reducer();
-//                    r.reduce(
-//                        handle_child(node_index!(nodes_ptr, 0), lll_octet),
-//                        handle_child(node_index!(nodes_ptr, 1), llr_octet),
-//                    )
-//                },
-//                || {
-//                    let r = lrl_octet.to_reducer();
-//                    r.reduce(
-//                        handle_child(node_index!(nodes_ptr, 2), lrl_octet),
-//                        handle_child(node_index!(nodes_ptr, 3), lrr_octet),
-//                    )
-//                },
-//            );
-//            reducer.reduce(left, right)
-//        },
-//        || {
-//            let reducer = rll_octet.to_reducer();
-//            let (left, right) = rayon::join(
-//                || {
-//                    let r = rll_octet.to_reducer();
-//                    r.reduce(
-//                        handle_child(node_index!(nodes_ptr, 4), rll_octet),
-//                        handle_child(node_index!(nodes_ptr, 5), rlr_octet),
-//                    )
-//                },
-//                || {
-//                    let r = rrl_octet.to_reducer();
-//                    r.reduce(
-//                        handle_child(node_index!(nodes_ptr, 6), rrl_octet),
-//                        handle_child(node_index!(nodes_ptr, 7), rrr_octet),
-//                    )
-//                },
-//            );
-//            reducer.reduce(left, right)
-//        },
-//    );
-//    reducer.reduce(left, right)
-//}
+        struct ChunkVisitor;
+        impl<'de> Visitor<'de> for ChunkVisitor {
+            type Value = Chunk;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Chunk")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let pos = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(0, &self))?;
+                let octree = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(1, &self))?;
+                Ok(Chunk::new(pos, octree))
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut pos = None;
+                let mut octree = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Pos => {
+                            if pos.is_some() {
+                                return Err(Error::duplicate_field("pos"));
+                            }
+                            pos = Some(map.next_value()?);
+                        }
+                        Field::Octree => {
+                            if octree.is_some() {
+                                return Err(Error::duplicate_field("octree"));
+                            }
+                            octree = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let pos = pos.ok_or_else(|| Error::missing_field("pos"))?;
+                let octree = octree.ok_or_else(|| Error::missing_field("octree"))?;
+                Ok(Chunk::new(pos, octree))
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["pos", "octree"];
+        deserializer.deserialize_struct("OctreeLevel", FIELDS, ChunkVisitor)
+    }
+}
 
 pub fn cube_mesh(size: f32) -> Vec<PosNormTex> {
     // normal

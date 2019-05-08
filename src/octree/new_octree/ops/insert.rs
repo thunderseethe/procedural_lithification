@@ -19,6 +19,7 @@ where
     Self: HasPosition<Position = PositionOf<O>>,
     O: HasPosition<Position = Point3<FieldOf<O>>>,
 {
+    #[inline]
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<PositionOf<Self>>,
@@ -35,6 +36,7 @@ impl<E, N> Insert for OctreeBase<E, N>
 where
     N: Number,
 {
+    #[inline]
     fn insert<P, R>(&self, pos: P, elem: R) -> Self
     where
         P: Borrow<Point3<N>>,

@@ -15,16 +15,19 @@ pub trait FromRawTree: ElementType + Sized {
     ) -> Either<Option<Self::Element>, Self>;
 }
 
-impl<E, N: Number> FromRawTree for OctreeBase<E, N> {
-    fn build_octree(data: &[Option<E>], morton_raw: usize) -> Either<Option<E>, Self> {
+impl<E, N: Number> FromRawTree for OctreeBase<E, N>
+where
+    E: Copy,
+{
+    fn build_octree(data: &[Option<E>], _morton_raw: usize) -> Either<Option<E>, Self> {
         Either::Left(data[0])
     }
 }
 
 impl<O> FromRawTree for OctreeLevel<O>
 where
-    O: FromRawTree + OctreeTypes + Diameter + PartialEq + HasData + New,
-    ElementOf<O>: PartialEq,
+    O: FromRawTree + Clone + OctreeTypes + Diameter + PartialEq + HasData + New,
+    ElementOf<O>: Clone + PartialEq,
     DataOf<Self>: From<DataOf<O>>,
 {
     fn build_octree(
@@ -32,18 +35,13 @@ where
         morton_raw: usize,
     ) -> Either<Option<ElementOf<O>>, Self> {
         let segment_size = usize::pow(Self::diameter(), 3);
-        let childrens = (0..7).map(|i| {
-            let start = i * segment_size;
-            let end = (i + 1) * segment_size;
-            O::build_octree(&data[start..end], morton_raw + start)
-        });
         let childrens: [Either<Option<ElementOf<O>>, O>; 8] = array_init::array_init(|i| {
             let start = i * segment_size;
             let end = (i + 1) * segment_size;
             O::build_octree(&data[start..end], morton_raw + start)
         });
         if childrens.iter().all_equal() {
-            childrens[0].map_right(|lower| {
+            childrens[0].clone().map_right(|lower| {
                 Self::new(
                     lower.into_data().into(),
                     MortonCode::from_raw(morton_raw as u64).as_point().unwrap(),
@@ -53,6 +51,7 @@ where
             let childs: [Ref<O>; 8] = array_init::array_init(|i| {
                 Ref::new(
                     childrens[i]
+                        .clone()
                         .map_left(|option_e| {
                             O::new(
                                 option_e
