@@ -1,3 +1,4 @@
+use crate::chunk::file_format::{ChunkDeserialize, ChunkSerialize};
 use crate::{chunk::Chunk, dimension::morton_code::MortonCode};
 use bincode::{deserialize_from, serialize_into};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
@@ -75,11 +76,7 @@ impl DimensionStorage {
             .exists()
     }
 
-    pub fn load<'a, P, M>(
-        &'a mut self,
-        dir: P,
-        pos: M,
-    ) -> Result<MutexGuard<'a, Chunk>, bincode::Error>
+    pub fn load<'a, P, M>(&'a mut self, dir: P, pos: M) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
         P: AsRef<Path>,
         M: Into<MortonCode>,
@@ -87,10 +84,9 @@ impl DimensionStorage {
         let morton = pos.into();
         let chunk_path = dir.as_ref().join(CHUNK_DIR).join(format!("{}", morton));
         SyncFile::open(chunk_path)
-            .map_err(|err| Box::new(bincode::ErrorKind::Io(err)))
             .and_then(|file| {
-                let decoder = DeflateDecoder::new(file);
-                deserialize_from(decoder)
+                let mut decoder = DeflateDecoder::new(file);
+                ChunkDeserialize::from(&mut decoder, morton.as_point().unwrap())
             })
             .map(move |chunk| {
                 // We're overwriting whatever was previously present at this index.
@@ -133,12 +129,9 @@ impl DimensionStorage {
                 let file_fut = OpenOptions::new().write(true).create(true).open(chunk_file);
                 runtime.spawn(future::lazy(move || {
                     file_fut
-                        .then(move |file_res| match file_res {
-                            Err(err) => Err(Box::new(bincode::ErrorKind::Io(err))),
-                            Ok(file) => {
-                                let encoder = DeflateEncoder::new(file, Compression::best());
-                                serialize_into(encoder, &chunk)
-                            }
+                        .and_then(move |file| {
+                            let mut encoder = DeflateEncoder::new(file, Compression::best());
+                            ChunkSerialize::into(&mut encoder, &chunk)
                         })
                         .map_err(|err| {
                             println!("{:?}", err);

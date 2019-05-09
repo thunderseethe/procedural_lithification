@@ -75,7 +75,7 @@ impl Dimension {
         dimension_dir: PATH,
         morton: MortonCode,
         point: P,
-    ) -> Result<MutexGuard<'a, Chunk>, bincode::Error>
+    ) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
         P: Borrow<Point3<i32>>,
     {

@@ -142,7 +142,7 @@ fn bytes_to_chunk_lists(bytes: &Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
     (nodes, blocks)
 }
 
-pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
+fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
     fn empty_octree_translate() -> (Vec<NodeVariant>, Vec<Block>) {
         (vec![NodeVariant::Empty], vec![])
     }
@@ -177,7 +177,7 @@ pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
     );
     chunk_lists_to_bytes(vars, blocks)
 }
-pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
+fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     fn construct_tree<N, B>(
         nodes: &mut N,
         blocks: &mut B,
@@ -192,7 +192,7 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
             NodeVariant::Empty => OctreeData::Empty,
             NodeVariant::Leaf =>
                 OctreeData::Leaf(Arc::new(blocks.next().unwrap())),
-            NodeVariant::Branch =>OctreeData::Node(
+            NodeVariant::Branch => OctreeData::Node(
                 array_init::from_iter(OctantIter::default().map(|octant|
                     Arc::new(construct_tree(
                         nodes,
@@ -214,6 +214,30 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     Chunk {
         pos: chunk_pos,
         octree: root,
+    }
+}
+
+pub struct ChunkDeserialize;
+impl ChunkDeserialize {
+    pub fn from<R>(reader: &mut R, pos: Point3<i32>) -> std::io::Result<Chunk>
+    where
+        R: std::io::Read,
+    {
+        let mut bytes: Vec<u8> = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .map(|_| bytes_to_chunk(&bytes, pos))
+    }
+}
+
+pub struct ChunkSerialize;
+impl ChunkSerialize {
+    pub fn into<W>(writer: &mut W, chunk: &Chunk) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        let bytes = chunk_to_bytes(chunk);
+        writer.write_all(&bytes).and_then(|_| writer.flush())
     }
 }
 

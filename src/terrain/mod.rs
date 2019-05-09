@@ -164,7 +164,7 @@ mod test {
             },
         );
         let chunk = terrain.generate_chunk(Point3::origin());
-        for (dim, block) in chunk.iter() {
+        for (dim, _) in chunk.iter() {
             let x = dim.bottom_left.x as isize - 128;
             let y = dim.bottom_left.y as isize - 128;
             let z = dim.bottom_left.z as isize - 128;

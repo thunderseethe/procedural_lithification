@@ -386,8 +386,6 @@ fn as_option(pred: bool) -> Option<()> {
 
 #[cfg(test)]
 mod test {
-    #[macro_use]
-    extern crate galvanic_assert;
     use super::*;
     use crate::octree::Octree;
     use galvanic_assert::matchers::collection::*;

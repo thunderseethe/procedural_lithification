@@ -12,8 +12,7 @@ use std::collections::HashMap;
 use std::result::Result;
 
 const TERRAIN_GROUP: usize = 1;
-const ENTITY_GROUP: usize = 2;
-const PLAYER_GROUP: usize = 3;
+const PLAYER_GROUP: usize = 2;
 
 #[derive(Debug)]
 pub enum CollisionDetectionError {
