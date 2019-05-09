@@ -1,4 +1,4 @@
-use crate::collision::CollisionDetection;
+use crate::collision::{CollisionDetection, CollisionId};
 use amethyst::{
     controls::{CursorHideSystem, HideCursor, MouseFocusUpdateSystem, WindowFocus},
     core::{
@@ -8,15 +8,13 @@ use amethyst::{
         specs::{Component, DispatcherBuilder, Join, NullStorage, Resources},
         Time, Transform,
     },
-    ecs::{Entity, Read, ReadExpect, ReadStorage, System, WriteStorage},
+    ecs::{Entity, Read, ReadStorage, System, WriteExpect, WriteStorage},
     input::{get_input_axis_simple, InputHandler},
     ui::{UiFinder, UiText},
     winit::{DeviceEvent, Event},
 };
-use ncollide3d::math::{Point, Vector};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{hash::Hash, marker::PhantomData, sync::Arc};
+use std::{hash::Hash, marker::PhantomData};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct PlayerControlTag;
@@ -63,23 +61,25 @@ where
 {
     type SystemData = (
         Read<'a, Time>,
-        ReadExpect<'a, Arc<Mutex<CollisionDetection>>>,
+        WriteExpect<'a, CollisionDetection>,
         WriteStorage<'a, Transform>,
+        ReadStorage<'a, CollisionId>,
         Read<'a, InputHandler<A, B>>,
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (time, collision, mut transform, input, tag): Self::SystemData) {
+    fn run(
+        &mut self,
+        (time, mut collision, mut transform, collision_id, input, tag): Self::SystemData,
+    ) {
         let x = get_input_axis_simple(&self.right_input_axis, &input);
         let y = get_input_axis_simple(&self.up_input_axis, &input);
         let z = get_input_axis_simple(&self.forward_input_axis, &input);
 
         if let Some(direction) = Unit::try_new(Vector3::new(x, y, z), 1.0e-6) {
-            for (transform, _) in (&mut transform, &tag).join() {
+            for (transform, collision_id, _) in (&mut transform, &collision_id, &tag).join() {
                 transform.move_along_local(direction, time.delta_seconds() * self.speed);
-                collision
-                    .lock()
-                    .set_player_pos(Point3::from(*transform.translation()));
+                collision.update_pos(collision_id.0, Point3::from(*transform.translation()));
             }
         }
     }

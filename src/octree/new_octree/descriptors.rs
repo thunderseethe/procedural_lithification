@@ -1,9 +1,9 @@
 //! Contains traits that describe properties of an Octree and it's data.
 use super::*;
-use alga::general::{ClosedAdd, ClosedSub, SubsetOf};
+use alga::general::{ClosedAdd, ClosedSub};
 use num_traits::Num;
-use std::ops::{Mul, Shl, Shr};
-use typenum::{Bit, Pow, PowerOfTwo, UInt, Unsigned, B0, U1};
+use std::ops::{Shl, Shr};
+use typenum::{Bit, PowerOfTwo, UInt, Unsigned, B0, U1};
 // Hello, it's your good pal bottom up recursion. Now with types
 
 pub trait ElementType {

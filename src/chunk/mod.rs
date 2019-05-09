@@ -1,9 +1,11 @@
 use crate::octree::new_octree::{Map, *};
+use alga::general::ClosedDiv;
 use amethyst::{
-    core::nalgebra::{convert, Point3, Vector2, Vector3},
+    core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
 };
-use rayon::iter::{plumbing::*, *};
+use num_traits::{AsPrimitive, NumCast};
+use rayon::iter::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Borrow;
 
@@ -19,21 +21,6 @@ use mesher::Mesher;
 pub struct Chunk {
     pub pos: Point3<i32>,
     octree: OctreeOf<Self>,
-}
-
-pub trait HasOctree {
-    type Octree: OctreeTypes + HasPosition;
-}
-impl HasOctree for Chunk {
-    type Octree = Octree8<Block, u8>;
-}
-pub type OctreeOf<T> = <T as HasOctree>::Octree;
-
-impl ElementType for Chunk {
-    type Element = ElementOf<OctreeOf<Chunk>>;
-}
-impl FieldType for Chunk {
-    type Field = FieldOf<OctreeOf<Chunk>>;
 }
 
 impl Chunk {
@@ -71,12 +58,12 @@ impl Chunk {
     }
 
     pub fn generate_mesh(&self) -> Option<Vec<(Point3<f32>, MeshData)>> {
-        let chunk_render_pos: Point3<f32> = convert(self.pos * 256);
+        let chunk_render_pos: Point3<f32> = Chunk::chunk_to_absl_coords(self.pos);
         self.octree.map(
             || None,
             |_| {
                 // Trivial cube
-                let mesh = cube_mesh(256.0).into();
+                let mesh = cube_mesh(Chunk::diameter() as f32).into();
                 Some(vec![(chunk_render_pos, mesh)])
             },
             |children| {
@@ -139,8 +126,62 @@ impl Chunk {
         )
     }
 
-    pub fn iter<'a>(&'a self) -> <&'a OctreeOf<Self> as IntoIterator>::IntoIter {
+    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<i32>) -> Point3<N>
+    where
+        N: Scalar,
+        i32: AsPrimitive<N>,
+    {
+        let translated = chunk_pos * 256;
+        Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
+    }
+
+    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<i32>
+    where
+        N: Scalar + ClosedDiv + AsPrimitive<i32> + NumCast,
+    {
+        let n256 = N::from(256).unwrap();
+        Point3::new(
+            (absl_pos.x / n256).as_(),
+            (absl_pos.y / n256).as_(),
+            (absl_pos.z / n256).as_(),
+        )
+    }
+
+    pub fn iter<'a>(&'a self) -> <&'a Self as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Chunk {
+    type IntoIter = <&'a OctreeOf<Chunk> as IntoIterator>::IntoIter;
+    type Item = <Self::IntoIter as Iterator>::Item;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.octree.into_iter()
+    }
+}
+
+// Shorthand to access Octree of type that implements HasOctree.
+pub type OctreeOf<T> = <T as HasOctree>::Octree;
+
+pub trait HasOctree: OctreeTypes + Diameter {
+    type Octree: OctreeLike;
+}
+impl HasOctree for Chunk {
+    type Octree = Octree8<Block, u8>;
+}
+
+impl ElementType for Chunk {
+    type Element = ElementOf<OctreeOf<Chunk>>;
+}
+impl FieldType for Chunk {
+    type Field = FieldOf<OctreeOf<Chunk>>;
+}
+impl Diameter for Chunk where {
+    type Diameter = <OctreeOf<Chunk> as Diameter>::Diameter;
+
+    fn diameter() -> usize {
+        <Chunk as HasOctree>::Octree::diameter()
     }
 }
 

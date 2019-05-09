@@ -95,8 +95,9 @@ where
 
     #[inline]
     fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
-        array_init::array_init(|x| {
-            array_init::array_init(|z| {
+        // TODO: generalize this over Octree::Diameter once new_octree lands
+        parallel_array_init::par_array_init(|x| {
+            parallel_array_init::par_array_init(|z| {
                 let nx = (chunk_pos.x as f64) + ((x as f64 / 256.0) - 0.5);
                 let nz = (chunk_pos.z as f64) + ((z as f64 / 256.0) - 0.5);
                 let noise = self.perlin.get([nx, nz])

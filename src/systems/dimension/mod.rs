@@ -2,20 +2,22 @@ use crate::dimension::morton_code::MortonCode;
 use amethyst::{
     core::{
         bundle::{Result, SystemBundle},
-        nalgebra::Point3,
         specs::DispatcherBuilder,
     },
-    renderer::MeshData,
+    ecs::{Component, VecStorage},
 };
 
 pub mod render_dimension;
 use crate::systems::dimension::render_dimension::RenderDimensionSystem;
 
 pub enum DimensionChunkEvent {
-    GeneratedChunk(Point3<f32>, MeshData),
+    NewChunkAt(MortonCode),
 }
 
 pub struct ChunkTag(MortonCode);
+impl Component for ChunkTag {
+    type Storage = VecStorage<Self>;
+}
 
 pub struct DimensionBundle;
 impl DimensionBundle {

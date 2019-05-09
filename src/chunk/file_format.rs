@@ -3,13 +3,12 @@ use array_init;
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::borrow::Borrow;
 use std::iter::Iterator;
-use std::sync::Arc;
 
 use crate::chunk::block::Block;
 use crate::chunk::{Chunk, OctreeOf, HasOctree};
 use crate::octree::new_octree::*;
 use crate::octree::{
-    octant::OctantId, octant_dimensions::OctantDimensions, octree_data::OctreeData, Octree,
+    octant::OctantId
 };
 
 #[derive(ToPrimitive, FromPrimitive, Clone, Copy)]
@@ -43,16 +42,6 @@ fn variants_to_bytes(vars: Vec<NodeVariant>) -> Vec<u8> {
             })
         })
         .collect()
-}
-fn bytes_to_variants<'a>(bytes: Vec<u8>) -> Vec<NodeVariant> {
-    let mut accum = Vec::with_capacity(bytes.len() * 4);
-    for byte in bytes {
-        accum.push(bits_to_variant((byte >> 6) & 0x03));
-        accum.push(bits_to_variant((byte >> 4) & 0x03));
-        accum.push(bits_to_variant((byte >> 2) & 0x03));
-        accum.push(bits_to_variant((byte >> 0) & 0x03));
-    }
-    accum
 }
 
 fn block_to_bytes(block: Block) -> [u8; 4] {
@@ -243,7 +232,6 @@ impl<E, N: Number> ConstructTree for OctreeBase<E, N> {
 pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     let (nodes, blocks) = bytes_to_chunk_lists(bytes);
     let (mut nodes, mut blocks) = (nodes.into_iter(), blocks.into_iter());
-    let root_dims = OctantDimensions::new(Point3::new(0, 0, 0), 256);
     let root: OctreeOf<Chunk> = <Chunk as HasOctree>::Octree::construct_tree(&mut nodes, &mut blocks, Point3::origin());
     Chunk {
         pos: chunk_pos,
@@ -251,11 +239,36 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     }
 }
 
+pub struct ChunkDeserialize;
+impl ChunkDeserialize {
+    pub fn from<R>(mut reader: R, pos: Point3<i32>) -> std::io::Result<Chunk>
+    where
+        R: std::io::Read,
+    {
+        let mut bytes: Vec<u8> = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .map(|_| bytes_to_chunk(&bytes, pos))
+    }
+}
+
+pub struct ChunkSerialize;
+impl ChunkSerialize {
+    pub fn into<W>(mut writer: W, chunk: &Chunk) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        let bytes = chunk_to_bytes(chunk);
+        writer.write_all(&bytes).and_then(|_| writer.flush())
+    }
+}
+
+#[cfg(test)]
 mod test {
     use amethyst::core::nalgebra::Point3;
 
     use super::{bytes_to_chunk, chunk_to_bytes};
-    use crate::terrain::{DefaultGenerateBlock, Terrain};
+    use crate::terrain::Terrain;
     #[test]
     fn translation_bidirectionality_test() {
         // This test will be considered successful if the chunk stays the same

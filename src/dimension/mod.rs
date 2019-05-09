@@ -75,7 +75,7 @@ impl Dimension {
         dimension_dir: PATH,
         morton: MortonCode,
         point: P,
-    ) -> Result<MutexGuard<'a, Chunk>, bincode::Error>
+    ) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
         P: Borrow<Point3<i32>>,
     {
@@ -87,6 +87,13 @@ impl Dimension {
                 .insert(morton, self.terrain.generate_chunk(point));
             Ok(chunk)
         }
+    }
+
+    pub fn get_chunk<M>(&self, morton: M) -> Option<&Mutex<Chunk>>
+    where
+        M: Into<MortonCode>,
+    {
+        self.storage.get(morton)
     }
 
     pub fn create<P>(&mut self, pos: P)
