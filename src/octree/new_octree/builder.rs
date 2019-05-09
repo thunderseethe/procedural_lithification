@@ -38,7 +38,7 @@ where
         // Segment size is the volume of the cube our octant covers
         let segment_size = usize::pow(Self::diameter(), 3);
         // Determine slice of the leaves for each child and recurse into their build_octree() method
-        let childrens = (0..8).map(|i| {
+        let mut childrens = (0..8).map(|i| {
             let start = i * segment_size;
             let end = (i + 1) * segment_size;
             O::build_octree(&data[start..end], morton_raw + start)
@@ -54,23 +54,24 @@ where
             })
         } else {
             // Here our children we're different so we have to construct a new octree
-            let childs: [Ref<O>; 8] = array_init::from_iter(childrens.map(|either| {
-                Ref::new(
-                    either
-                        .map_left(|option_e| {
-                            O::new(
-                                option_e
-                                    .map(<O as HasData>::Data::leaf)
-                                    .unwrap_or_else(<O as HasData>::Data::empty),
-                                MortonCode::from_raw((morton_raw + segment_size * i) as u64)
-                                    .as_point()
-                                    .unwrap(),
-                            )
-                        })
-                        .into_inner(),
-                )
-            }))
-            .expect("Failed to construct array from children iterator in build_octree");
+            let childs: [Ref<O>; 8] =
+                array_init::from_iter(childrens.enumerate().map(|(i, either)| {
+                    Ref::new(
+                        either
+                            .map_left(|option_e| {
+                                O::new(
+                                    option_e
+                                        .map(<O as HasData>::Data::leaf)
+                                        .unwrap_or_else(<O as HasData>::Data::empty),
+                                    MortonCode::from_raw((morton_raw + segment_size * i) as u64)
+                                        .as_point()
+                                        .unwrap(),
+                                )
+                            })
+                            .into_inner(),
+                    )
+                }))
+                .expect("Failed to construct array from children iterator in build_octree");
             let point = MortonCode::from_raw(morton_raw as u64).as_point().unwrap();
             let octree = Self::new(LevelData::Node(childs), point);
             Either::Right(octree)
@@ -166,7 +167,7 @@ where
 
 /// Determines the size of Vector that will hold all possbile base leaves of Self
 /// This will be Self::diamter() ^ 3 for anything with a diameter.
-trait RawTreeSize: ElementType + Diameter
+pub trait RawTreeSize: ElementType + Diameter
 where
     Self::Element: Clone,
 {
@@ -181,7 +182,7 @@ where
 {
 }
 
-struct RawTree<E>(Vec<Option<E>>);
+pub struct RawTree<E>(Vec<Option<E>>);
 impl<'data, E: Send> IntoParallelIterator for &'data mut RawTree<E> {
     type Item = &'data mut Option<E>;
     type Iter = LeavesIterMut<'data, E>;
@@ -195,7 +196,7 @@ impl<'data, E: Send> IntoParallelIterator for &'data mut RawTree<E> {
     }
 }
 
-struct LeavesIterMut<'data, E> {
+pub struct LeavesIterMut<'data, E> {
     slice: &'data mut [Option<E>],
     len: usize,
 }

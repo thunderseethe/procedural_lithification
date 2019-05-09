@@ -6,8 +6,8 @@ use std::iter::Iterator;
 use std::sync::Arc;
 
 use crate::chunk::block::Block;
-use crate::chunk::Chunk;
-use crate::octree::new_octree::{ElementType, Map, Ref};
+use crate::chunk::{Chunk, OctreeOf, HasOctree};
+use crate::octree::new_octree::*;
 use crate::octree::{
     octant::OctantId, octant_dimensions::OctantDimensions, octree_data::OctreeData, Octree,
 };
@@ -143,78 +143,108 @@ fn bytes_to_chunk_lists(bytes: &Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
     (nodes, blocks)
 }
 
-pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
-    fn empty_octree_translate<E>() -> (Vec<NodeVariant>, Vec<E>) {
-        (vec![NodeVariant::Empty], vec![])
-    }
-    fn leaf_octree_translate<E>(block: &E) -> (Vec<NodeVariant>, Vec<E>) {
-        (vec![NodeVariant::Leaf], vec![*block])
-    }
-    fn node_octree_translate<O>(tree: &[Ref<O>; 8]) -> (Vec<NodeVariant>, Vec<O::Element>)
-    where
-        O: ElementType + Map,
-    {
-        let mut node_accum = vec![NodeVariant::Branch];
-        let mut block_accum = Vec::new();
-
-        let lists: Vec<_> = tree
-            .iter()
-            .map(|e| {
-                e.map(
-                    empty_octree_translate,
-                    leaf_octree_translate,
-                    node_octree_translate,
-                )
-            })
-            .collect();
-        for (node_list, block_list) in lists {
-            node_accum.extend(node_list);
-            block_accum.extend(block_list);
+trait TranslateOctree: ElementType {
+    fn translate(&self, nodes: &mut Vec<NodeVariant>, elements: &mut Vec<Self::Element>);
+}
+impl<O> TranslateOctree for OctreeLevel<O>
+where
+    O: OctreeTypes + TranslateOctree,
+    ElementOf<Self>: Clone,
+{
+    fn translate(&self, nodes: &mut Vec<NodeVariant>, elements: &mut Vec<ElementOf<Self>>) {
+        use LevelData::*;
+        match self.data() {
+            Empty => {
+                nodes.push(NodeVariant::Empty);
+                // No element to append
+            }
+            Leaf(ref elem) => {
+                nodes.push(NodeVariant::Leaf);
+                elements.push(elem.clone());
+            }
+            Node(ref children) => {
+                nodes.push(NodeVariant::Branch);
+                for child in children {
+                    child.translate(nodes, elements);
+                }
+            }
         }
-        (node_accum, block_accum)
     }
+}
+impl<E: Clone, N: Number> TranslateOctree for OctreeBase<E, N> {
+    fn translate(&self, nodes: &mut Vec<NodeVariant>, elements: &mut Vec<E>) {
+        match self.data() {
+            None => nodes.push(NodeVariant::Empty),
+            Some(elem) => {
+                nodes.push(NodeVariant::Leaf);
+                elements.push(elem.clone());
+            }
+        }
+    }
+}
 
-    let (vars, blocks) = chunk.octree.map(
-        empty_octree_translate,
-        leaf_octree_translate,
-        node_octree_translate,
-    );
+pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
+    let (mut vars, mut blocks) = (Vec::new(), Vec::new());
+    chunk.octree.translate(&mut vars, &mut blocks);
     chunk_lists_to_bytes(vars, blocks)
 }
-pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
-    fn construct_tree<N, B>(
-        nodes: &mut N,
-        blocks: &mut B,
-        height: u32,
-        bounds: OctantDimensions,
-    ) -> Octree<Block>
+
+trait ConstructTree: OctreeTypes {
+    fn construct_tree<N, E>(nodes: &mut N, elements: &mut E, pos: Point3<Self::Field>) -> Self
     where
         N: Iterator<Item = NodeVariant>,
-        B: Iterator<Item = Block>,
+        E: Iterator<Item = Self::Element>;
+}
+impl<O> ConstructTree for OctreeLevel<O> 
+where
+    O: OctreeTypes + ConstructTree + Diameter,
+{
+    fn construct_tree<N, E>(nodes: &mut N, elements: &mut E, pos: Point3<FieldOf<Self>>) -> Self
+    where
+        N: Iterator<Item = NodeVariant>,
+        E: Iterator<Item = ElementOf<Self>>
     {
-        let data = match nodes.next().unwrap() {
-            NodeVariant::Empty => OctreeData::Empty,
-            NodeVariant::Leaf =>
-                OctreeData::Leaf(Arc::new(blocks.next().unwrap())),
-            NodeVariant::Branch =>OctreeData::Node(
-                array_init::from_iter(OctantId::iter().map(|octant|
-                    Arc::new(construct_tree(
-                        nodes,
-                        blocks,
-                        height-1,
-                        octant.sub_octant_bounds(&bounds)
-                    ))
-                )).expect("Recursive reconstruction of Octree failed.")
-            ),
+        let node = nodes.next().unwrap();
+        let data = match node {
+            NodeVariant::Empty => LevelData::Empty,
+            NodeVariant::Leaf => LevelData::Leaf(elements.next().unwrap()),
+            NodeVariant::Branch => {
+                LevelData::Node(array_init::from_iter(OctantId::iter().map(|octant| 
+                    Ref::new(O::construct_tree(
+                        nodes, 
+                        elements, 
+                        octant.sub_octant_bottom_left(pos, O::diameter()))) 
+                )).unwrap())
+            },
+            NodeVariant::Error => 
+                panic!("Attempted to reconstitute an erroneous node value. Something something the bounding is fucked."),
+        };
+        Self::new(data, pos)
+    }
+}
+impl<E, N: Number> ConstructTree for OctreeBase<E, N> {
+    fn construct_tree<NIter, EIter>(nodes: &mut NIter, elements: &mut EIter, pos: Point3<FieldOf<Self>>) -> Self
+    where
+        NIter: Iterator<Item = NodeVariant>,
+        EIter: Iterator<Item = ElementOf<Self>>
+    {
+        let node = nodes.next().unwrap();
+        let data = match node {
+            NodeVariant::Empty => None,
+            NodeVariant::Leaf => elements.next(), // micro optimization ^_^
+            NodeVariant::Branch =>
+                panic!("Encountered Branch node variant while constructing OctreeBase."),
             NodeVariant::Error =>
                 panic!("Attempted to reconstitute an erroneous node value. Something something the bounding is fucked."),
         };
-        Octree::with_fields(data, bounds, height)
+        Self::new(data, pos)
     }
+}
+pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     let (nodes, blocks) = bytes_to_chunk_lists(bytes);
     let (mut nodes, mut blocks) = (nodes.into_iter(), blocks.into_iter());
     let root_dims = OctantDimensions::new(Point3::new(0, 0, 0), 256);
-    let root = construct_tree(&mut nodes, &mut blocks, 8, root_dims);
+    let root: OctreeOf<Chunk> = <Chunk as HasOctree>::Octree::construct_tree(&mut nodes, &mut blocks, Point3::origin());
     Chunk {
         pos: chunk_pos,
         octree: root,
