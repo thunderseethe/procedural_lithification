@@ -1,5 +1,4 @@
-use crate::mut_ptr::MultiThreadMutPtr;
-use crate::octree::new_octree::*;
+use crate::octree::new_octree::{Map, *};
 use amethyst::{
     core::nalgebra::{convert, Point3, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
@@ -29,6 +28,13 @@ impl HasOctree for Chunk {
     type Octree = Octree8<Block, u8>;
 }
 pub type OctreeOf<T> = <T as HasOctree>::Octree;
+
+impl ElementType for Chunk {
+    type Element = ElementOf<OctreeOf<Chunk>>;
+}
+impl FieldType for Chunk {
+    type Field = FieldOf<OctreeOf<Chunk>>;
+}
 
 impl Chunk {
     pub fn new(pos: Point3<i32>, octree: Octree8<Block, u8>) -> Self {

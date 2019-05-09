@@ -1,12 +1,8 @@
 use super::HasOctree;
 use crate::chunk::{Chunk, OctreeOf};
 use crate::octree::new_octree::builder::*;
-use crate::octree::new_octree::*;
-use crate::octree::Octree;
 use amethyst::core::nalgebra::Point3;
-use either::Either;
-use rayon::iter::{plumbing::*, *};
-use std::sync::Arc;
+use rayon::iter::*;
 
 impl Builder for Chunk
 where

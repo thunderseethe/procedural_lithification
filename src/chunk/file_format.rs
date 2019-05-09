@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::chunk::block::Block;
 use crate::chunk::Chunk;
+use crate::octree::new_octree::{ElementType, Map, Ref};
 use crate::octree::{
     octant::OctantId, octant_dimensions::OctantDimensions, octree_data::OctreeData, Octree,
 };
@@ -143,13 +144,16 @@ fn bytes_to_chunk_lists(bytes: &Vec<u8>) -> (Vec<NodeVariant>, Vec<Block>) {
 }
 
 pub fn chunk_to_bytes(chunk: &Chunk) -> Vec<u8> {
-    fn empty_octree_translate() -> (Vec<NodeVariant>, Vec<Block>) {
+    fn empty_octree_translate<E>() -> (Vec<NodeVariant>, Vec<E>) {
         (vec![NodeVariant::Empty], vec![])
     }
-    fn leaf_octree_translate(block: &Block) -> (Vec<NodeVariant>, Vec<Block>) {
+    fn leaf_octree_translate<E>(block: &E) -> (Vec<NodeVariant>, Vec<E>) {
         (vec![NodeVariant::Leaf], vec![*block])
     }
-    fn node_octree_translate(tree: &[Arc<Octree<Block>>; 8]) -> (Vec<NodeVariant>, Vec<Block>) {
+    fn node_octree_translate<O>(tree: &[Ref<O>; 8]) -> (Vec<NodeVariant>, Vec<O::Element>)
+    where
+        O: ElementType + Map,
+    {
         let mut node_accum = vec![NodeVariant::Branch];
         let mut block_accum = Vec::new();
 

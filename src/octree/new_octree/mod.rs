@@ -26,7 +26,7 @@ pub mod builder;
 
 /// Poor man's higher kinded types.
 /// Used to toggle the implementation between Ref and Arc;
-type Ref<T> = Arc<T>;
+pub type Ref<T> = Arc<T>;
 
 pub type DataOf<T> = <T as HasData>::Data;
 pub type PositionOf<T> = <T as HasPosition>::Position;
@@ -35,10 +35,13 @@ pub type FieldOf<T> = <T as FieldType>::Field;
 
 /// Composite trait to describe the full functionality of an Octree
 /// This trait exists mostly for convenience when parametizing over an Octree
-pub trait OctreeLike: New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes {}
+pub trait OctreeLike:
+    Map + New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes
+{
+}
 impl<'a, T: 'a> OctreeLike for T
 where
-    T: New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes,
+    T: Map + New + Insert + Delete + Get + HasPosition + Diameter + OctreeTypes,
     &'a T: IntoIterator,
 {
 }
@@ -367,35 +370,19 @@ impl<O: OctreeTypes> OctreeLevel<O> {
         }
     }
 
-    /// Maps over a single level of the Octree using 3 functions to handle each possible case.
-    /// This should not be confused with the more traditional concept of map from Functor.
-    /// To accomplish something like that use `&octree.into_iter().map(...)`
-    ///
-    /// Example usage:
-    ///
-    /// ```
-    /// let octree = Octree::<u32, u8, U64>::at_origin(None);
-    ///
-    /// let number_of_leaves = octree.map(
-    ///     || 0,
-    ///     |leaf_elem| 1,
-    ///     |node_children| 8,
-    /// );
-    /// assert_eq!(number_of_leaves, 0);
-    /// ```
-    pub fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
-    where
-        EFn: FnOnce() -> Output,
-        LFn: FnOnce(&<Self as ElementType>::Element) -> Output,
-        NFn: FnOnce(&[Ref<O>; 8]) -> Output,
-    {
-        use LevelData::*;
-        match &self.data {
-            Empty => empty_fn(),
-            Leaf(elem) => leaf_fn(&elem),
-            Node(ref nodes) => node_fn(nodes),
-        }
-    }
+    //pub fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
+    //where
+    //    EFn: FnOnce() -> Output,
+    //    LFn: FnOnce(&<Self as ElementType>::Element) -> Output,
+    //    NFn: FnOnce(&[Ref<O>; 8]) -> Output,
+    //{
+    //    use LevelData::*;
+    //    match &self.data {
+    //        Empty => empty_fn(),
+    //        Leaf(elem) => leaf_fn(&elem),
+    //        Node(ref nodes) => node_fn(nodes),
+    //    }
+    //}
 }
 impl<E: Clone, N: Number> OctreeBase<E, N> {
     fn with_data(&self, data: DataOf<Self>) -> Self {
