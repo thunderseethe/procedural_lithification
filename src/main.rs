@@ -6,19 +6,17 @@ extern crate parking_lot;
 extern crate tokio;
 
 use amethyst::{
-    assets::AssetLoaderSystemData,
     core::{
         nalgebra::{Point3, Vector3},
         ArcThreadPool, Transform, TransformBundle,
     },
-    ecs::{Join, ReadExpect},
+    ecs::Join,
     input::InputBundle,
     prelude::*,
     renderer::{
         AmbientColor, Camera, DirectionalLight, DisplayConfig, DrawShaded, DrawSkybox, Event,
-        FilterMethod, KeyboardInput, Light, Material, MaterialDefaults, Mesh, MeshHandle, Pipeline,
-        PngFormat, PosNormTex, Projection, RenderBundle, Rgba, SamplerInfo, Stage, Texture,
-        TextureMetadata, VirtualKeyCode, WindowEvent, WrapMode,
+        KeyboardInput, Light, Pipeline, PosNormTex, Projection, RenderBundle, Rgba, Stage,
+        VirtualKeyCode, WindowEvent,
     },
     shrev::EventChannel,
     ui::{DrawUi, UiBundle, UiCreator},
@@ -26,7 +24,7 @@ use amethyst::{
 };
 use cubes_lib::{
     chunk::Chunk,
-    collision::{CollisionDetection, CollisionDetectionError},
+    collision::CollisionDetection,
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
         collision::CheckPlayerCollisionSystem,
@@ -63,7 +61,7 @@ impl Gameplay {
         let mut dimension = Dimension::default();
         {
             let morton = MortonCode::from_raw(0);
-            let chunk = dimension
+            dimension
                 ._create_or_load_chunk(
                     self.dimension_config.directory.as_path(),
                     morton,
@@ -76,54 +74,54 @@ impl Gameplay {
         dimension
     }
 
-    pub fn render_initial_dimension(world: &mut World) {
-        let material = world.exec(
-            |(texture_loader, material_defaults): (
-                AssetLoaderSystemData<Texture>,
-                ReadExpect<MaterialDefaults>,
-            )| {
-                let albedo = texture_loader.load(
-                    "textures/dirt.png",
-                    PngFormat,
-                    TextureMetadata::srgb()
-                        .with_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Tile)),
-                    (),
-                );
-                let default = material_defaults.0.clone();
-                Material { albedo, ..default }
-            },
-        );
-        let meshes: Vec<(Point3<f32>, MeshHandle)> = world.exec(
-            |(dimension, mesh_loader): (
-                ReadExpect<Arc<Mutex<Dimension>>>,
-                AssetLoaderSystemData<Mesh>,
-            )| {
-                dimension
-                    .lock()
-                    .iter()
-                    .filter_map(|mtx_chunk| {
-                        let chunk = mtx_chunk.lock();
-                        chunk.generate_mesh()
-                    })
-                    .flatten()
-                    .map(move |(point, mesh_data)| {
-                        (point, mesh_loader.load_from_data(mesh_data, ()))
-                    })
-                    .collect()
-            },
-        );
-        // I miss us
-        for (point, mesh) in meshes {
-            let mut pos: Transform = Transform::default();
-            pos.set_xyz(point.x, point.y, point.z);
-            world
-                .create_entity()
-                .with(pos)
-                .with(mesh)
-                .with(material.clone())
-                .build();
-        }
-    }
+    //pub fn render_initial_dimension(world: &mut World) {
+    //    let material = world.exec(
+    //        |(texture_loader, material_defaults): (
+    //            AssetLoaderSystemData<Texture>,
+    //            ReadExpect<MaterialDefaults>,
+    //        )| {
+    //            let albedo = texture_loader.load(
+    //                "textures/dirt.png",
+    //                PngFormat,
+    //                TextureMetadata::srgb()
+    //                    .with_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Tile)),
+    //                (),
+    //            );
+    //            let default = material_defaults.0.clone();
+    //            Material { albedo, ..default }
+    //        },
+    //    );
+    //    let meshes: Vec<(Point3<f32>, MeshHandle)> = world.exec(
+    //        |(dimension, mesh_loader): (
+    //            ReadExpect<Arc<Mutex<Dimension>>>,
+    //            AssetLoaderSystemData<Mesh>,
+    //        )| {
+    //            dimension
+    //                .lock()
+    //                .iter()
+    //                .filter_map(|mtx_chunk| {
+    //                    let chunk = mtx_chunk.lock();
+    //                    chunk.generate_mesh()
+    //                })
+    //                .flatten()
+    //                .map(move |(point, mesh_data)| {
+    //                    (point, mesh_loader.load_from_data(mesh_data, ()))
+    //                })
+    //                .collect()
+    //        },
+    //    );
+    //    // I miss us
+    //    for (point, mesh) in meshes {
+    //        let mut pos: Transform = Transform::default();
+    //        pos.set_xyz(point.x, point.y, point.z);
+    //        world
+    //            .create_entity()
+    //            .with(pos)
+    //            .with(mesh)
+    //            .with(material.clone())
+    //            .build();
+    //    }
+    //}
 
     //fn convert_to_chunk_coord(vec: &Vector3<f32>) -> Point3<i32> {
     //    let x = (vec.x / 256.0).floor() as i32;
@@ -135,7 +133,7 @@ impl Gameplay {
 
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
     fn on_start(&mut self, data: StateData<GameData>) {
-        let StateData { mut world, .. } = data;
+        let StateData { world, .. } = data;
         world.add_resource(AmbientColor(Rgba::from([0.5; 3])));
 
         println!("Creating lights...");

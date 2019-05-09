@@ -1,14 +1,11 @@
 use crate::chunk::Chunk;
 use amethyst::core::nalgebra as na;
 use amethyst::core::nalgebra::Point3;
-use amethyst::ecs::{Component, VecStorage};
 use ncollide3d::events::ProximityEvents;
 use ncollide3d::math::{Isometry, Vector};
-use ncollide3d::query::Ray;
 use ncollide3d::shape::{Cuboid, ShapeHandle};
 use ncollide3d::world::{
-    CollisionGroups, CollisionGroupsPairFilter, CollisionObjectHandle, CollisionWorld,
-    GeometricQueryType,
+    CollisionGroups, CollisionObjectHandle, CollisionWorld, GeometricQueryType,
 };
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -113,10 +110,11 @@ impl CollisionDetection {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::octree::{Number, Octree};
+    use crate::octree::Number;
     use crate::terrain::{HeightMap, Terrain};
     use amethyst::core::nalgebra::Point3;
     use ncollide3d::math::{Point, Vector};
+    use ncollide3d::query::Ray;
 
     #[test]
     fn test_proximity_event_created_for_player_near_chunk() {

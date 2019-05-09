@@ -2,11 +2,9 @@ use crate::dimension::morton_code::MortonCode;
 use amethyst::{
     core::{
         bundle::{Result, SystemBundle},
-        nalgebra::Point3,
         specs::DispatcherBuilder,
     },
     ecs::{Component, VecStorage},
-    renderer::MeshData,
 };
 
 pub mod render_dimension;

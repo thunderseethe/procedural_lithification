@@ -1,10 +1,9 @@
-use crate::chunk::Chunk;
 use crate::collision::CollisionDetection;
 use crate::dimension::Dimension;
 use crate::systems::dimension::DimensionChunkEvent;
 use crate::systems::player::PlayerControlTag;
 use amethyst::{
-    core::{EventReader, Transform},
+    core::Transform,
     ecs::{
         Read, ReadExpect, ReadStorage, Resources, System, SystemData, WriteExpect, WriteStorage,
     },
@@ -21,7 +20,7 @@ impl<'a> System<'a> for CheckPlayerCollisionSystem {
         ReadStorage<'a, PlayerControlTag>,
     );
 
-    fn run(&mut self, (mut collision, mut transform, tag): Self::SystemData) {
+    fn run(&mut self, (mut collision, _, _): Self::SystemData) {
         collision.update();
         for event in collision.proximity_events() {
             println!("{:?}", event);

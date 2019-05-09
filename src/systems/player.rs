@@ -8,15 +8,13 @@ use amethyst::{
         specs::{Component, DispatcherBuilder, Join, NullStorage, Resources},
         Time, Transform,
     },
-    ecs::{Entity, Read, ReadExpect, ReadStorage, System, WriteStorage, WriteExpect},
+    ecs::{Entity, Read, ReadStorage, System, WriteExpect, WriteStorage},
     input::{get_input_axis_simple, InputHandler},
     ui::{UiFinder, UiText},
     winit::{DeviceEvent, Event},
 };
-use ncollide3d::math::{Point, Vector};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::{hash::Hash, marker::PhantomData, sync::Arc};
+use std::{hash::Hash, marker::PhantomData};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct PlayerControlTag;
@@ -77,8 +75,7 @@ where
         if let Some(direction) = Unit::try_new(Vector3::new(x, y, z), 1.0e-6) {
             for (transform, _) in (&mut transform, &tag).join() {
                 transform.move_along_local(direction, time.delta_seconds() * self.speed);
-                collision
-                    .set_player_pos(Point3::from(*transform.translation()));
+                collision.set_player_pos(Point3::from(*transform.translation()));
             }
         }
     }

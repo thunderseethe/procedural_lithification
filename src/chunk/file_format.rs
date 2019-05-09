@@ -8,10 +8,7 @@ use std::sync::Arc;
 use crate::chunk::block::Block;
 use crate::chunk::Chunk;
 use crate::octree::{
-    octant::{Octant, OctantIter},
-    octant_dimensions::OctantDimensions,
-    octree_data::OctreeData,
-    Octree,
+    octant::OctantIter, octant_dimensions::OctantDimensions, octree_data::OctreeData, Octree,
 };
 
 #[derive(ToPrimitive, FromPrimitive, Clone, Copy)]
@@ -220,11 +217,12 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
     }
 }
 
+#[cfg(test)]
 mod test {
     use amethyst::core::nalgebra::Point3;
 
     use super::{bytes_to_chunk, chunk_to_bytes};
-    use crate::terrain::{DefaultGenerateBlock, Terrain};
+    use crate::terrain::Terrain;
     #[test]
     fn translation_bidirectionality_test() {
         // This test will be considered successful if the chunk stays the same
