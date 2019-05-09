@@ -11,7 +11,7 @@ use std::time::Duration;
 fn serialization_bench(c: &mut Criterion) {
     c.bench_function("Chunk Serialization", |b| {
         let chunk = Terrain::default().generate_chunk(Point3::origin());
-        b.iter(|| ChunkSerialize::into(std::io::sink(), &chunk))
+        b.iter(|| ChunkSerialize::into(&mut std::io::sink(), &chunk))
     });
 
     c.bench_function("Chunk Deserialization", |b| {

@@ -43,16 +43,6 @@ fn variants_to_bytes(vars: Vec<NodeVariant>) -> Vec<u8> {
         })
         .collect()
 }
-fn bytes_to_variants<'a>(bytes: Vec<u8>) -> Vec<NodeVariant> {
-    let mut accum = Vec::with_capacity(bytes.len() * 4);
-    for byte in bytes {
-        accum.push(bits_to_variant((byte >> 6) & 0x03));
-        accum.push(bits_to_variant((byte >> 4) & 0x03));
-        accum.push(bits_to_variant((byte >> 2) & 0x03));
-        accum.push(bits_to_variant((byte >> 0) & 0x03));
-    }
-    accum
-}
 
 fn block_to_bytes(block: Block) -> [u8; 4] {
     array_init::array_init(|i| ((block >> (3 - i) * 8) & 0xFF) as u8)
@@ -219,7 +209,7 @@ fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
 
 pub struct ChunkDeserialize;
 impl ChunkDeserialize {
-    pub fn from<R>(reader: &mut R, pos: Point3<i32>) -> std::io::Result<Chunk>
+    pub fn from<R>(mut reader: R, pos: Point3<i32>) -> std::io::Result<Chunk>
     where
         R: std::io::Read,
     {
@@ -232,7 +222,7 @@ impl ChunkDeserialize {
 
 pub struct ChunkSerialize;
 impl ChunkSerialize {
-    pub fn into<W>(writer: &mut W, chunk: &Chunk) -> std::io::Result<()>
+    pub fn into<W>(mut writer: W, chunk: &Chunk) -> std::io::Result<()>
     where
         W: std::io::Write,
     {

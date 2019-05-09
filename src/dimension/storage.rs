@@ -1,6 +1,5 @@
 use crate::chunk::file_format::{ChunkDeserialize, ChunkSerialize};
 use crate::{chunk::Chunk, dimension::morton_code::MortonCode};
-use bincode::{deserialize_from, serialize_into};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use rayon::iter::{
@@ -85,8 +84,8 @@ impl DimensionStorage {
         let chunk_path = dir.as_ref().join(CHUNK_DIR).join(format!("{}", morton));
         SyncFile::open(chunk_path)
             .and_then(|file| {
-                let mut decoder = DeflateDecoder::new(file);
-                ChunkDeserialize::from(&mut decoder, morton.as_point().unwrap())
+                let decoder = DeflateDecoder::new(file);
+                ChunkDeserialize::from(decoder, morton.as_point().unwrap())
             })
             .map(move |chunk| {
                 // We're overwriting whatever was previously present at this index.
@@ -130,8 +129,8 @@ impl DimensionStorage {
                 runtime.spawn(future::lazy(move || {
                     file_fut
                         .and_then(move |file| {
-                            let mut encoder = DeflateEncoder::new(file, Compression::best());
-                            ChunkSerialize::into(&mut encoder, &chunk)
+                            let encoder = DeflateEncoder::new(file, Compression::best());
+                            ChunkSerialize::into(encoder, &chunk)
                         })
                         .map_err(|err| {
                             println!("{:?}", err);

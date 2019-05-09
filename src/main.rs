@@ -24,7 +24,7 @@ use amethyst::{
 };
 use cubes_lib::{
     chunk::Chunk,
-    collision::CollisionDetection,
+    collision::{CollisionDetection, CollisionId},
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
     systems::{
         collision::CheckPlayerCollisionSystem,
@@ -73,62 +73,6 @@ impl Gameplay {
         dimension.store(self.dimension_config.directory.as_path(), runtime);
         dimension
     }
-
-    //pub fn render_initial_dimension(world: &mut World) {
-    //    let material = world.exec(
-    //        |(texture_loader, material_defaults): (
-    //            AssetLoaderSystemData<Texture>,
-    //            ReadExpect<MaterialDefaults>,
-    //        )| {
-    //            let albedo = texture_loader.load(
-    //                "textures/dirt.png",
-    //                PngFormat,
-    //                TextureMetadata::srgb()
-    //                    .with_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Tile)),
-    //                (),
-    //            );
-    //            let default = material_defaults.0.clone();
-    //            Material { albedo, ..default }
-    //        },
-    //    );
-    //    let meshes: Vec<(Point3<f32>, MeshHandle)> = world.exec(
-    //        |(dimension, mesh_loader): (
-    //            ReadExpect<Arc<Mutex<Dimension>>>,
-    //            AssetLoaderSystemData<Mesh>,
-    //        )| {
-    //            dimension
-    //                .lock()
-    //                .iter()
-    //                .filter_map(|mtx_chunk| {
-    //                    let chunk = mtx_chunk.lock();
-    //                    chunk.generate_mesh()
-    //                })
-    //                .flatten()
-    //                .map(move |(point, mesh_data)| {
-    //                    (point, mesh_loader.load_from_data(mesh_data, ()))
-    //                })
-    //                .collect()
-    //        },
-    //    );
-    //    // I miss us
-    //    for (point, mesh) in meshes {
-    //        let mut pos: Transform = Transform::default();
-    //        pos.set_xyz(point.x, point.y, point.z);
-    //        world
-    //            .create_entity()
-    //            .with(pos)
-    //            .with(mesh)
-    //            .with(material.clone())
-    //            .build();
-    //    }
-    //}
-
-    //fn convert_to_chunk_coord(vec: &Vector3<f32>) -> Point3<i32> {
-    //    let x = (vec.x / 256.0).floor() as i32;
-    //    let y = (vec.y / 256.0).floor() as i32;
-    //    let z = (vec.z / 256.0).floor() as i32;
-    //    Point3::new(x, y, z)
-    //}
 }
 
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
@@ -145,9 +89,11 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
 
         world.create_entity().with(light).build();
 
+        let mut collision = CollisionDetection::new();
         println!("Put camera");
         let mut transform = Transform::default();
         let player_pos = Point3::new(128.0, 128.0, 128.0);
+        let player_handle = collision.add_player(player_pos);
         transform.set_position(player_pos.coords);
         transform.rotate_local(Vector3::y_axis(), std::f32::consts::PI);
         world
@@ -158,6 +104,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             )))
             .with(transform)
             .with(PlayerControlTag::default())
+            .with(CollisionId::new(player_handle))
             .build();
 
         let dimension = {
@@ -166,7 +113,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
             self.init_dimension(&mut runtime, &mut chunk_channel)
         };
         world.add_resource(Arc::new(Mutex::new(dimension)));
-        world.add_resource(CollisionDetection::new(player_pos));
+        world.add_resource(collision);
 
         world.exec(|mut creator: UiCreator<'_>| {
             creator.create("ui/position.ron", ());
