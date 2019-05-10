@@ -25,6 +25,17 @@ where
     }
 }
 
+#[inline]
+fn all_equal<I>(mut iter: I) -> bool
+where
+    I: Iterator,
+    I::Item: PartialEq,
+{
+    iter.next()
+        .map(|head| iter.all(|ele| head == ele))
+        .unwrap_or(true)
+}
+
 impl<O> FromRawTree for OctreeLevel<O>
 where
     O: FromRawTree + Clone + OctreeTypes + Diameter + PartialEq + HasData + New,
@@ -44,7 +55,7 @@ where
             O::build_octree(&data[start..end], morton_raw + start)
         });
         // If all our children are equal we don't want to construct an octree and instead defer up the call stack
-        if childrens.clone().all_equal() {
+        if all_equal(childrens.clone()) {
             childrens.next().unwrap().map_right(|lower| {
                 // This code generally won't be run but in the case we have 8 equal Either::Rights combine there data to construct an Octree that's one level higher
                 Self::new(
