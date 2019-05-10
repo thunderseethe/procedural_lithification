@@ -1,6 +1,4 @@
-use crate::octree::new_octree::{
-    FieldType, HasData, HasPosition, Number, OctreeBase, OctreeLevel, OctreeTypes,
-};
+use crate::octree::{FieldType, HasData, Number, OctreeBase, OctreeLevel, OctreeTypes};
 use amethyst::core::nalgebra::Point3;
 
 /// Trait for constructing an Octree

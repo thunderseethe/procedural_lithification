@@ -125,7 +125,8 @@ impl CollisionDetection {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::octree::Number;
+    use crate::chunk::Chunk;
+    use crate::octree::{Diameter, FieldOf};
     use crate::terrain::{HeightMap, Terrain};
     use amethyst::core::nalgebra::Point3;
     use ncollide3d::math::{Point, Vector};
@@ -136,15 +137,13 @@ mod test {
         let mut world = CollisionDetection::new();
         let _player_handle = world.add_player(Point3::origin());
         let chunk = Terrain::default()
-            .with_block_generator(
-                |_height_map: &HeightMap, p: &Point3<Number>| {
-                    if p.y < 128 {
-                        Some(1)
-                    } else {
-                        None
-                    }
-                },
-            )
+            .with_block_generator(|_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
+                if p.y < (Chunk::diameter() / 2) as u8 {
+                    Some(1)
+                } else {
+                    None
+                }
+            })
             .generate_chunk(Point3::origin());
         world
             .add_chunk(&chunk)

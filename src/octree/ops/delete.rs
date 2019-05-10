@@ -1,4 +1,4 @@
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use std::borrow::Borrow;
 
 /// Delete an element from the Octree.
@@ -22,7 +22,7 @@ where
     where
         P: Borrow<PositionOf<Self>>,
     {
-        use crate::octree::new_octree::LevelData::*;
+        use LevelData::*;
         match self.data {
             Empty => (*self).clone(),
             Leaf(ref elem) => self.create_sub_nodes(pos, None, O::Data::leaf(elem.clone())),

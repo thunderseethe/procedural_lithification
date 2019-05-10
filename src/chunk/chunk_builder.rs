@@ -1,6 +1,6 @@
 use super::HasOctree;
 use crate::chunk::{Chunk, OctreeOf};
-use crate::octree::new_octree::builder::*;
+use crate::octree::builder::*;
 use amethyst::core::nalgebra::Point3;
 use rayon::iter::*;
 

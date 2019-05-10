@@ -1,4 +1,7 @@
-use crate::octree::new_octree::{Map, *};
+use crate::octree::{
+    Diameter, ElementOf, ElementType, FieldOf, FieldType, Get, Insert, Map, Octree, Octree8,
+    OctreeLike, OctreeTypes, PositionOf,
+};
 use alga::general::ClosedDiv;
 use amethyst::{
     core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
@@ -347,7 +350,6 @@ fn pos_norm_tex(
 #[cfg(test)]
 mod test {
     use super::{Chunk, Point3};
-    use crate::octree::Octree;
     use std::collections::HashSet;
 
     #[test]

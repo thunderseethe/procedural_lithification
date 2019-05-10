@@ -9,7 +9,7 @@
 //! This example will construct an Octree of size 128 (height 7) filled with the element -124.
 extern crate typenum;
 
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use typenum::{Bit, PowerOfTwo, Shright, UInt, UTerm, Unsigned, B1, U256};
 
 /// Trait implemented by UInt and UTerm to map them to their respective Octrees.

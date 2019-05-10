@@ -1,9 +1,7 @@
-use crate::octree::new_octree::{
-    ElementType, LevelData, Number, OctreeBase, OctreeLevel, OctreeTypes, Ref,
-};
+use crate::octree::{ElementType, LevelData, Number, OctreeBase, OctreeLevel, OctreeTypes, Ref};
 
 pub trait Map: ElementType {
-    type Children: Map;
+    type Children;
 
     /// Maps over a single level of the Octree using 3 functions to handle each possible case.
     /// This should not be confused with the more traditional concept of map from Functor.
@@ -30,7 +28,7 @@ pub trait Map: ElementType {
 
 impl<O> Map for OctreeLevel<O>
 where
-    O: OctreeTypes + Map,
+    O: OctreeTypes,
 {
     type Children = O;
 
@@ -55,7 +53,7 @@ where
 {
     type Children = ();
 
-    fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
+    fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, _node_fn: NFn) -> Output
     where
         EFn: FnOnce() -> Output,
         LFn: FnOnce(&Self::Element) -> Output,
@@ -66,21 +64,4 @@ where
             Some(ref elem) => leaf_fn(elem),
         }
     }
-}
-
-// This is all nonesense and exists to satisfy the borrow checker.
-impl Map for () {
-    type Children = ();
-
-    fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
-    where
-        EFn: FnOnce() -> Output,
-        LFn: FnOnce(&Self::Element) -> Output,
-        NFn: FnOnce(&[Ref<Self::Children>; 8]) -> Output,
-    {
-        empty_fn()
-    }
-}
-impl ElementType for () {
-    type Element = ();
 }

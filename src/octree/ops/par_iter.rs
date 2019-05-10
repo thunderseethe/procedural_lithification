@@ -1,5 +1,5 @@
-use crate::octree::new_octree::*;
 use crate::octree::octant::Octant;
+use crate::octree::*;
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 

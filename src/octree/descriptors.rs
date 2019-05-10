@@ -237,16 +237,6 @@ pub trait HasPosition {
 
     fn position(&self) -> &Self::Position;
 }
-impl<'a, T> HasPosition for &'a T
-where
-    T: HasPosition,
-{
-    type Position = PositionOf<T>;
-
-    fn position(&self) -> &Self::Position {
-        &self.position()
-    }
-}
 impl<O> HasPosition for OctreeLevel<O>
 where
     O: OctreeTypes,
@@ -279,7 +269,7 @@ where
             LevelData::Leaf(elem) => LevelData::Leaf(elem),
             // Since each node _should_ have a different position this case should never come up.
             // If it does more than likely an Octree invariant has been invalidated.
-            LevelData::Node(nodes) => {
+            LevelData::Node(_) => {
                 panic!("Attempted to convert LevelData::Node from O to OctreeLevel<O>.")
             }
         }

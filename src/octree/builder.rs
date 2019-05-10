@@ -1,5 +1,5 @@
 use crate::dimension::morton_code::MortonCode;
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use either::Either;
 use itertools::Itertools;
 use rayon::iter::plumbing::*;

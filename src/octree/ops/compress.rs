@@ -1,4 +1,4 @@
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use amethyst::core::nalgebra::Scalar;
 use itertools::Itertools;
 
@@ -15,7 +15,7 @@ where
     /// Checks the children of OctreeLevel and combines them into a Leaf or Empty node if they are all equal
     #[inline]
     fn compress_nodes(self) -> Self {
-        use crate::octree::new_octree::LevelData::*;
+        use LevelData::*;
         match &self.data {
             Node(ref nodes) => {
                 if { nodes.iter().map(|node| node.data()).all_equal() } {

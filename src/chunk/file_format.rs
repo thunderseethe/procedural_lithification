@@ -6,7 +6,7 @@ use std::iter::Iterator;
 
 use crate::chunk::block::Block;
 use crate::chunk::{Chunk, OctreeOf, HasOctree};
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use crate::octree::{
     octant::OctantId
 };

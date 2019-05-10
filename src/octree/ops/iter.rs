@@ -1,5 +1,5 @@
-use crate::octree::new_octree::*;
 use crate::octree::octant::Octant;
+use crate::octree::*;
 
 // Iteration over an OctreeLevel happens in two ways.
 // In the trivial case we have an Empty or Leaf node and we iterate over std::option::IntoIter<E>

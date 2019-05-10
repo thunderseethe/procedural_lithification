@@ -1,4 +1,5 @@
-use crate::octree::new_octree::*;
+use crate::octree::octant::OctantId;
+use crate::octree::*;
 
 /// Trait for internal bookkeeping of Octree duing insertion and deletion.
 /// Not a publicly available method.
@@ -29,7 +30,7 @@ impl<E: Clone, N: Number> CreateSubNodes for OctreeBase<E, N> {
     type SubData = ();
 
     #[inline]
-    fn create_sub_nodes<P>(&self, pos: P, elem: Option<Self::Element>, default: ()) -> Self
+    fn create_sub_nodes<P>(&self, _pos: P, _elem: Option<Self::Element>, _default: ()) -> Self
     where
         P: Borrow<Point3<FieldOf<Self>>>,
     {
@@ -62,8 +63,7 @@ where
     where
         P: Borrow<Point3<FieldOf<O>>>,
     {
-        use crate::octree::new_octree::LevelData::Node;
-        use crate::octree::octant::OctantId;
+        use crate::octree::LevelData::Node;
         let modified_octant = self.get_octant(pos.borrow());
         let octree_nodes: [Ref<O>; 8] = array_init::from_iter(OctantId::iter().map(|octant| {
             let data = default.clone();
@@ -85,7 +85,7 @@ where
     where
         P: Borrow<Point3<FieldOf<O>>>,
     {
-        use crate::octree::new_octree::LevelData::*;
+        use crate::octree::LevelData::*;
         match &self.data {
             // Create 8 empty children and recurse into one to place data
             Empty => self.create_sub_nodes(pos, data, O::Data::empty()),

@@ -1,5 +1,5 @@
-use crate::octree::new_octree::*;
-use crate::octree::{octant::Octant, octant_face::OctantFace};
+use crate::octree::octant::{Octant, OctantFace};
+use crate::octree::*;
 use crate::volume::Cuboid;
 use alga::general::SubsetOf;
 use amethyst::{

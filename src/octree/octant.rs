@@ -1,9 +1,8 @@
-use super::new_octree::descriptors::{Diameter, HasData, HasPosition};
-use super::octant_dimensions::OctantDimensions;
-use alga::general::{ClosedAdd, SubsetOf, SupersetOf};
-use amethyst::core::nalgebra::{convert, Point3, Scalar, Vector3};
+use super::descriptors::HasPosition;
+use crate::octree::descriptors::Number;
+use alga::general::ClosedAdd;
+use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::{AsPrimitive, FromPrimitive};
-use std::borrow::Borrow;
 
 /// Represnt each possible Octant as a sum type.
 #[derive(PartialEq, Clone, Eq, Copy, Debug, FromPrimitive, ToPrimitive)]
@@ -19,7 +18,6 @@ pub enum OctantId {
     LowLowLow = 0,
 }
 use self::OctantId::*;
-use crate::octree::new_octree::descriptors::Number;
 
 impl OctantId {
     fn is_x_high(&self) -> bool {
@@ -41,31 +39,6 @@ impl OctantId {
             HighHighHigh | HighLowHigh | LowHighHigh | LowLowHigh => true,
             _ => false,
         }
-    }
-
-    pub fn sub_octant_bounds(&self, containing_bounds: &OctantDimensions) -> OctantDimensions {
-        let (bottom_left, center) = (containing_bounds.bottom_left(), containing_bounds.center());
-
-        let x_center = if self.is_x_high() {
-            center.x
-        } else {
-            bottom_left.x
-        };
-        let y_center = if self.is_y_high() {
-            center.y
-        } else {
-            bottom_left.y
-        };
-        let z_center = if self.is_z_high() {
-            center.z
-        } else {
-            bottom_left.z
-        };
-
-        OctantDimensions::new(
-            Point3::new(x_center, y_center, z_center),
-            containing_bounds.diameter() / 2,
-        )
     }
 
     pub fn sub_octant_bottom_left<N>(
@@ -117,6 +90,16 @@ impl Iterator for OctantIdIter {
         self.indx += 1;
         octant
     }
+}
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone, FromPrimitive, ToPrimitive)]
+pub enum OctantFace {
+    Back = 0,
+    Up = 1,
+    Front = 2,
+    Down = 3,
+    Right = 4,
+    Left = 5,
 }
 
 #[derive(Hash, PartialEq, Eq, Debug)]

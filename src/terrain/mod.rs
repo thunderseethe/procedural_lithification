@@ -5,28 +5,27 @@ use std::borrow::Borrow;
 
 use crate::chunk::{
     block::{Block, DIRT_BLOCK},
-    chunk_builder::ChunkBuilder,
     Chunk,
 };
-use crate::octree::new_octree::builder::Builder;
-use crate::octree::Number;
+use crate::octree::builder::Builder;
+use crate::octree::{Diameter, FieldOf};
 
 pub type HeightMap = [[u8; 256]; 256];
 
 pub trait GenerateBlockFn {
-    fn generate(&self, height_map: &HeightMap, point: &Point3<Number>) -> Option<Block>;
+    fn generate(&self, height_map: &HeightMap, point: &Point3<FieldOf<Chunk>>) -> Option<Block>;
 }
 impl<F> GenerateBlockFn for F
 where
-    F: Fn(&HeightMap, &Point3<Number>) -> Option<Block>,
+    F: Fn(&HeightMap, &Point3<FieldOf<Chunk>>) -> Option<Block>,
 {
-    fn generate(&self, height_map: &HeightMap, pos: &Point3<Number>) -> Option<Block> {
+    fn generate(&self, height_map: &HeightMap, pos: &Point3<FieldOf<Chunk>>) -> Option<Block> {
         self(height_map, pos)
     }
 }
 pub struct DefaultGenerateBlock();
 impl GenerateBlockFn for DefaultGenerateBlock {
-    fn generate(&self, height_map: &HeightMap, p: &Point3<Number>) -> Option<Block> {
+    fn generate(&self, height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>) -> Option<Block> {
         let subarray: [u8; 256] = height_map[p.x as usize];
         let height: u8 = subarray[p.z as usize];
         if p.y <= height {
@@ -96,10 +95,11 @@ where
     #[inline]
     fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
         // TODO: generalize this over Octree::Diameter once new_octree lands
+        let chunk_size = Chunk::diameter() as f64;
         parallel_array_init::par_array_init(|x| {
             parallel_array_init::par_array_init(|z| {
-                let nx = (chunk_pos.x as f64) + ((x as f64 / 256.0) - 0.5);
-                let nz = (chunk_pos.z as f64) + ((z as f64 / 256.0) - 0.5);
+                let nx = (chunk_pos.x as f64) + ((x as f64 / chunk_size) - 0.5);
+                let nz = (chunk_pos.z as f64) + ((z as f64 / chunk_size) - 0.5);
                 let noise = self.perlin.get([nx, nz])
                     + 0.5 * self.perlin.get([2.0 * nx, 2.0 * nz])
                     + 0.25 * self.perlin.get([4.0 * nx, 4.0 * nz])
@@ -107,7 +107,7 @@ where
                     + 0.06 * self.perlin.get([16.0 * nx, 16.0 * nz])
                     + 0.03 * self.perlin.get([32.0 * nx, 32.0 * nz]);
                 let noise = noise / (1.0 + 0.5 + 0.25 + 0.13 + 0.06 + 0.03);
-                ((noise / 2.0 + 0.5) * 256.0).ceil() as u8
+                ((noise / 2.0 + 0.5) * chunk_size).ceil() as u8
             })
         })
     }
@@ -130,12 +130,14 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use num_traits::AsPrimitive;
 
     #[test]
     fn test_generating_plateau_works_correctly() {
+        let threshold = (Chunk::diameter() / 2).as_();
         let terrain = Terrain::default().with_block_generator(
-            |_height_map: &HeightMap, p: &Point3<Number>| {
-                if p.y < 128 {
+            |_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
+                if p.y < threshold {
                     Some(1)
                 } else {
                     None
@@ -146,18 +148,21 @@ mod test {
         println!("{:?}", chunk);
         for octant in chunk.iter() {
             assert_eq!(octant.data, &1);
-            assert!(octant.bottom_left_front.y < 128);
+            assert!(octant.bottom_left_front.y < threshold);
         }
     }
 
     #[test]
     fn test_generating_sphere_works_correctly() {
+        let chunk_size = Chunk::diameter() as isize;
+        let chunk_half = chunk_size / 2;
+        let chunk_quarter = chunk_half / 2;
         let terrain = Terrain::default().with_block_generator(
-            |_height_map: &HeightMap, p: &Point3<Number>| {
-                let x = p.x as isize - 128;
-                let y = p.y as isize - 128;
-                let z = p.z as isize - 128;
-                if x * x + y * y + z * z <= 64 * 64 {
+            |_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
+                let x = p.x as isize - chunk_half;
+                let y = p.y as isize - chunk_half;
+                let z = p.z as isize - chunk_half;
+                if x * x + y * y + z * z <= chunk_quarter * chunk_quarter {
                     Some(1)
                 } else {
                     None
@@ -166,10 +171,10 @@ mod test {
         );
         let chunk = terrain.generate_chunk(Point3::origin());
         for octant in chunk.iter() {
-            let x = octant.bottom_left_front.x as isize - 128;
-            let y = octant.bottom_left_front.y as isize - 128;
-            let z = octant.bottom_left_front.z as isize - 128;
-            assert!(x * x + y * y + z * z <= 64 * 64);
+            let x = octant.bottom_left_front.x as isize - chunk_half;
+            let y = octant.bottom_left_front.y as isize - chunk_half;
+            let z = octant.bottom_left_front.z as isize - chunk_half;
+            assert!(x * x + y * y + z * z <= chunk_quarter * chunk_quarter);
         }
     }
 }

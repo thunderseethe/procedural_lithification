@@ -1,5 +1,5 @@
 use super::New;
-use crate::octree::new_octree::*;
+use crate::octree::*;
 use amethyst::core::nalgebra::Point3;
 use std::borrow::Borrow;
 

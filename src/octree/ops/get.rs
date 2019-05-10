@@ -1,6 +1,5 @@
-use crate::octree::new_octree::descriptors::{ElementType, FieldType, HasPosition, Number};
-use crate::octree::new_octree::{Diameter, OctreeBase, OctreeLevel, PositionOf};
-use amethyst::core::nalgebra::Point3;
+use crate::octree::descriptors::{ElementType, FieldType, HasPosition, Number};
+use crate::octree::{Diameter, LevelData::*, OctreeBase, OctreeLevel, PositionOf};
 use std::borrow::Borrow;
 
 /// Retrieve an element from the Octree
@@ -19,7 +18,6 @@ where
     where
         P: Borrow<PositionOf<Self>>,
     {
-        use crate::octree::new_octree::LevelData::*;
         match self.data {
             Empty => None,
             Leaf(ref elem) => Some(elem),
