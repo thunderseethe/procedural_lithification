@@ -153,7 +153,7 @@ pub trait Diameter {
 
     const DIAMETER: usize;
 
-    fn get_diameter(&self) -> usize {
+    fn diameter(&self) -> usize {
         Self::DIAMETER
     }
 }

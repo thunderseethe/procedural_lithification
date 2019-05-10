@@ -52,7 +52,7 @@ where
                 .consume(Octant::new(
                     elem.clone(),
                     self.node.bottom_left,
-                    self.node.get_diameter(),
+                    self.node.diameter(),
                 ))
                 .complete(),
             Node(ref nodes) => parallel_drive_node_children(nodes, consumer, |node, consumer| {

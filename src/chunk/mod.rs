@@ -79,7 +79,7 @@ impl Chunk {
                                 |_| {
                                     let octree_offset: Vector3<f32> =
                                         convert(octree.root_point().coords);
-                                    let mesh = cube_mesh(octree.get_diameter() as f32).into();
+                                    let mesh = cube_mesh(octree.diameter() as f32).into();
                                     vec![(chunk_render_pos + octree_offset, mesh)]
                                 },
                                 |children| {
@@ -95,8 +95,7 @@ impl Chunk {
                                                 |_| {
                                                     Some((
                                                         chunk_render_pos + octree_root_offset,
-                                                        cube_mesh(octree.get_diameter() as f32)
-                                                            .into(),
+                                                        cube_mesh(octree.diameter() as f32).into(),
                                                     ))
                                                 },
                                                 |_| {

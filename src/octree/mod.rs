@@ -411,7 +411,7 @@ mod test {
             >,
         > = Octree::<u32, u8, U256>::new(LevelData::Empty, Point3::origin());
 
-        assert_eq!(octree.get_diameter(), 256);
+        assert_eq!(octree.diameter(), 256);
         assert_eq!(
             octree,
             OctreeLevel {
