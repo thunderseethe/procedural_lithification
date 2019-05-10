@@ -36,7 +36,7 @@ where
         morton_raw: usize,
     ) -> Either<Option<ElementOf<O>>, Self> {
         // Segment size is the volume of the cube our octant covers
-        let segment_size = usize::pow(Self::DIAMETER, 3);
+        let segment_size = usize::pow(O::DIAMETER, 3);
         // Determine slice of the leaves for each child and recurse into their build_octree() method
         let mut childrens = (0..8).map(|i| {
             let start = i * segment_size;
