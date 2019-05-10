@@ -66,7 +66,7 @@ impl Chunk {
             || None,
             |_| {
                 // Trivial cube
-                let mesh = cube_mesh(Chunk::diameter() as f32).into();
+                let mesh = cube_mesh(Chunk::DIAMETER as f32).into();
                 Some(vec![(chunk_render_pos, mesh)])
             },
             |children| {
@@ -134,19 +134,20 @@ impl Chunk {
         N: Scalar,
         i32: AsPrimitive<N>,
     {
-        let translated = chunk_pos * 256;
+        let translated = chunk_pos * Chunk::DIAMETER.as_();
         Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
     }
 
     pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<i32>
     where
         N: Scalar + ClosedDiv + AsPrimitive<i32> + NumCast,
+        usize: AsPrimitive<N>,
     {
-        let n256 = N::from(256).unwrap();
+        let n_diameter = Chunk::DIAMETER.as_();
         Point3::new(
-            (absl_pos.x / n256).as_(),
-            (absl_pos.y / n256).as_(),
-            (absl_pos.z / n256).as_(),
+            (absl_pos.x / n_diameter).as_(),
+            (absl_pos.y / n_diameter).as_(),
+            (absl_pos.z / n_diameter).as_(),
         )
     }
 
@@ -183,9 +184,7 @@ impl FieldType for Chunk {
 impl Diameter for Chunk where {
     type Diameter = <OctreeOf<Chunk> as Diameter>::Diameter;
 
-    fn diameter() -> usize {
-        <Chunk as HasOctree>::Octree::diameter()
-    }
+    const DIAMETER: usize = <OctreeOf<Chunk> as Diameter>::DIAMETER;
 }
 
 impl<'de> Deserialize<'de> for Chunk

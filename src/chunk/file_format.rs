@@ -202,7 +202,7 @@ where
                     Ref::new(O::construct_tree(
                         nodes, 
                         elements, 
-                        octant.sub_octant_bottom_left(pos, O::diameter()))) 
+                        octant.sub_octant_bottom_left(pos, O::DIAMETER)))
                 )).unwrap())
             },
             NodeVariant::Error => 

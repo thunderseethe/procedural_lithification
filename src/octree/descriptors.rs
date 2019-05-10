@@ -150,10 +150,11 @@ impl<E> Leaf<E> for Option<E> {
 /// Each OctreeLevel on top of this doubles it's sub octrees diameter
 pub trait Diameter {
     type Diameter: Unsigned + Double;
-    fn diameter() -> usize;
+
+    const DIAMETER: usize;
 
     fn get_diameter(&self) -> usize {
-        Self::diameter()
+        Self::DIAMETER
     }
 }
 impl<O> Diameter for OctreeLevel<O>
@@ -162,9 +163,7 @@ where
 {
     type Diameter = <O::Diameter as Double>::Output;
 
-    fn diameter() -> usize {
-        O::diameter() << 1
-    }
+    const DIAMETER: usize = O::DIAMETER << 1;
 }
 impl<E, N> Diameter for OctreeBase<E, N>
 where
@@ -172,9 +171,7 @@ where
 {
     type Diameter = U1;
 
-    fn diameter() -> usize {
-        1
-    }
+    const DIAMETER: usize = 1;
 }
 impl<'a, T> Diameter for &'a T
 where
@@ -182,9 +179,7 @@ where
 {
     type Diameter = T::Diameter;
 
-    fn diameter() -> usize {
-        T::diameter()
-    }
+    const DIAMETER: usize = T::DIAMETER;
 }
 
 /// This a more specific version of Shl<B1>, with the caveat that is enforces it's Output implements Double

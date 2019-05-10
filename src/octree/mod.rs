@@ -291,7 +291,7 @@ where
     {
         use crate::octree::octant::OctantId::*;
         let pos = pos_ref.borrow();
-        let r = num_traits::NumCast::from(Self::diameter() >> 1).unwrap();
+        let r = num_traits::NumCast::from(Self::DIAMETER >> 1).unwrap();
         match (
             pos.x >= self.bottom_left.x + r,
             pos.y >= self.bottom_left.y + r,
@@ -317,7 +317,7 @@ where
         P: Borrow<<Self as HasPosition>::Position>,
     {
         let pos = pos_ref.borrow();
-        let diameter: usize = <Self as Diameter>::diameter();
+        let diameter: usize = <Self as Diameter>::DIAMETER;
         pos.x.as_() > self.bottom_left.x.as_() + diameter
             || pos.x < self.bottom_left.x
             || pos.y.as_() > self.bottom_left.y.as_() + diameter

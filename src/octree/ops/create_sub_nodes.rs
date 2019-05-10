@@ -67,7 +67,7 @@ where
         let modified_octant = self.get_octant(pos.borrow());
         let octree_nodes: [Ref<O>; 8] = array_init::from_iter(OctantId::iter().map(|octant| {
             let data = default.clone();
-            let sub_bottom_left = octant.sub_octant_bottom_left(self.bottom_left, O::diameter());
+            let sub_bottom_left = octant.sub_octant_bottom_left(self.bottom_left, O::DIAMETER);
             let octree = O::new(data, sub_bottom_left);
             let octree = if modified_octant == octant {
                 octree.place(pos.borrow(), elem.clone())

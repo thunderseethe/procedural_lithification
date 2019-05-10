@@ -27,7 +27,7 @@ where
             // Trivial cases map Leaf => Some and Empty => None and convert to iterator
             Empty => OctantIter::Leaf(None.into_iter()),
             Leaf(ref elem) => OctantIter::Leaf(
-                Some(Octant::new(elem, &self.bottom_left, Self::diameter())).into_iter(),
+                Some(Octant::new(elem, &self.bottom_left, Self::DIAMETER)).into_iter(),
             ),
             // In this case we map over our children and convert each one to an iterator and then combine them all with flat_map
             Node(ref nodes) => OctantIter::Nodes(nodes.iter().flat_map(
@@ -71,7 +71,7 @@ impl<'a, E: Clone, N: Number> IntoIterator for OctreeBase<E, N> {
     fn into_iter(self) -> Self::IntoIter {
         self.data
             .as_ref()
-            .map(|elem| Octant::new(elem.clone(), self.bottom_left.clone(), Self::diameter()))
+            .map(|elem| Octant::new(elem.clone(), self.bottom_left.clone(), Self::DIAMETER))
             .into_iter()
     }
 }
@@ -82,7 +82,7 @@ impl<'a, E, N: Number> IntoIterator for &'a OctreeBase<E, N> {
     fn into_iter(self) -> Self::IntoIter {
         self.data
             .as_ref()
-            .map(|elem| Octant::new(elem, &self.bottom_left, Self::diameter()))
+            .map(|elem| Octant::new(elem, &self.bottom_left, Self::DIAMETER))
             .into_iter()
     }
 }

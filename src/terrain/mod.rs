@@ -10,7 +10,7 @@ use crate::chunk::{
 use crate::octree::builder::Builder;
 use crate::octree::{Diameter, FieldOf};
 
-pub type HeightMap = [[u8; 256]; 256];
+pub type HeightMap = [[u8; Chunk::DIAMETER]; Chunk::DIAMETER];
 
 pub trait GenerateBlockFn {
     fn generate(&self, height_map: &HeightMap, point: &Point3<FieldOf<Chunk>>) -> Option<Block>;
@@ -26,7 +26,7 @@ where
 pub struct DefaultGenerateBlock();
 impl GenerateBlockFn for DefaultGenerateBlock {
     fn generate(&self, height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>) -> Option<Block> {
-        let subarray: [u8; 256] = height_map[p.x as usize];
+        let subarray: [u8; Chunk::DIAMETER] = height_map[p.x as usize];
         let height: u8 = subarray[p.z as usize];
         if p.y <= height {
             Some(DIRT_BLOCK)
@@ -95,7 +95,7 @@ where
     #[inline]
     fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
         // TODO: generalize this over Octree::Diameter once new_octree lands
-        let chunk_size = Chunk::diameter() as f64;
+        let chunk_size = Chunk::DIAMETER as f64;
         parallel_array_init::par_array_init(|x| {
             parallel_array_init::par_array_init(|z| {
                 let nx = (chunk_pos.x as f64) + ((x as f64 / chunk_size) - 0.5);
@@ -134,7 +134,7 @@ mod test {
 
     #[test]
     fn test_generating_plateau_works_correctly() {
-        let threshold = (Chunk::diameter() / 2).as_();
+        let threshold = (Chunk::DIAMETER / 2).as_();
         let terrain = Terrain::default().with_block_generator(
             |_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
                 if p.y < threshold {
@@ -154,7 +154,7 @@ mod test {
 
     #[test]
     fn test_generating_sphere_works_correctly() {
-        let chunk_size = Chunk::diameter() as isize;
+        let chunk_size = Chunk::DIAMETER as isize;
         let chunk_half = chunk_size / 2;
         let chunk_quarter = chunk_half / 2;
         let terrain = Terrain::default().with_block_generator(

@@ -75,7 +75,7 @@ where
     fn into_par_iter(self) -> Self::Iter {
         let p = self.bottom_left;
         self.data
-            .map(|elem| Octant::new(elem, p, Self::diameter()))
+            .map(|elem| Octant::new(elem, p, Self::DIAMETER))
             .into_par_iter()
     }
 }

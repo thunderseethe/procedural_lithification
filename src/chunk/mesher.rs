@@ -94,7 +94,7 @@ where
         Mesher {
             octree,
             offset: Vector3::new(p.x, p.y, p.z),
-            size: O::diameter(),
+            size: O::DIAMETER,
         }
     }
 

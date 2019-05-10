@@ -138,7 +138,7 @@ mod test {
         let _player_handle = world.add_player(Point3::origin());
         let chunk = Terrain::default()
             .with_block_generator(|_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
-                if p.y < (Chunk::diameter() / 2) as u8 {
+                if p.y < (Chunk::DIAMETER / 2) as u8 {
                     Some(1)
                 } else {
                     None
