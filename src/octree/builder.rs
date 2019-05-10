@@ -36,7 +36,7 @@ where
         morton_raw: usize,
     ) -> Either<Option<ElementOf<O>>, Self> {
         // Segment size is the volume of the cube our octant covers
-        let segment_size = usize::pow(Self::DIAMETER, 3);
+        let segment_size = usize::pow(O::DIAMETER, 3);
         // Determine slice of the leaves for each child and recurse into their build_octree() method
         let mut childrens = (0..8).map(|i| {
             let start = i * segment_size;
@@ -247,5 +247,26 @@ impl<'a, T: Send> Producer for SliceProducer<'a, T> {
             SliceProducer { slice: left },
             SliceProducer { slice: right },
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::octree::Octree;
+    use typenum::*;
+
+    #[test]
+    fn test_raw_tree_size_matches_octree_size() {
+        let raw_tree = Octree::<u32, u8, U64>::raw_tree();
+
+        assert_eq!(raw_tree.0.len(), 262144);
+    }
+
+    #[test]
+    fn test_builder_uses_expected_raw_tree_for_octree() {
+        let builder = Octree::<u32, u8, U128>::builder();
+
+        assert_eq!(builder.data.0.len(), 2097152);
     }
 }
