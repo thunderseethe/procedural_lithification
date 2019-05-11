@@ -5,27 +5,40 @@ use std::borrow::Borrow;
 
 use crate::chunk::{
     block::{Block, DIRT_BLOCK},
-    Chunk,
+    Chunk, OctreeOf,
 };
+use crate::field::*;
 use crate::octree::builder::Builder;
-use crate::octree::{Diameter, FieldOf};
+use crate::octree::Diameter;
 
 pub type HeightMap = [[u8; Chunk::DIAMETER]; Chunk::DIAMETER];
 
 pub trait GenerateBlockFn {
-    fn generate(&self, height_map: &HeightMap, point: &Point3<FieldOf<Chunk>>) -> Option<Block>;
+    fn generate(
+        &self,
+        height_map: &HeightMap,
+        point: &Point3<FieldOf<OctreeOf<Chunk>>>,
+    ) -> Option<Block>;
 }
 impl<F> GenerateBlockFn for F
 where
-    F: Fn(&HeightMap, &Point3<FieldOf<Chunk>>) -> Option<Block>,
+    F: Fn(&HeightMap, &Point3<FieldOf<OctreeOf<Chunk>>>) -> Option<Block>,
 {
-    fn generate(&self, height_map: &HeightMap, pos: &Point3<FieldOf<Chunk>>) -> Option<Block> {
+    fn generate(
+        &self,
+        height_map: &HeightMap,
+        pos: &Point3<FieldOf<OctreeOf<Chunk>>>,
+    ) -> Option<Block> {
         self(height_map, pos)
     }
 }
 pub struct DefaultGenerateBlock();
 impl GenerateBlockFn for DefaultGenerateBlock {
-    fn generate(&self, height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>) -> Option<Block> {
+    fn generate(
+        &self,
+        height_map: &HeightMap,
+        p: &Point3<FieldOf<OctreeOf<Chunk>>>,
+    ) -> Option<Block> {
         let subarray: [u8; Chunk::DIAMETER] = height_map[p.x as usize];
         let height: u8 = subarray[p.z as usize];
         if p.y <= height {
@@ -80,7 +93,7 @@ where
 
     pub fn generate_chunk<P>(&self, chunk_pos_ref: P) -> Chunk
     where
-        P: Borrow<Point3<i32>>,
+        P: Borrow<Point3<FieldOf<Chunk>>>,
     {
         let chunk_pos = chunk_pos_ref.borrow();
         if chunk_pos.y > 0 {
@@ -93,7 +106,7 @@ where
     }
 
     #[inline]
-    fn create_height_map(&self, chunk_pos: &Point3<i32>) -> HeightMap {
+    fn create_height_map(&self, chunk_pos: &Point3<FieldOf<Chunk>>) -> HeightMap {
         // TODO: generalize this over Octree::Diameter once new_octree lands
         let chunk_size = Chunk::DIAMETER as f64;
         parallel_array_init::par_array_init(|x| {
@@ -115,7 +128,7 @@ where
     #[inline]
     pub fn y_zero_chunk_generator<P>(&self, chunk_pos_ref: P) -> Chunk
     where
-        P: Borrow<Point3<i32>>,
+        P: Borrow<Point3<FieldOf<Chunk>>>,
     {
         let chunk_pos = chunk_pos_ref.borrow();
         let height_map = self.create_height_map(chunk_pos);
@@ -136,7 +149,7 @@ mod test {
     fn test_generating_plateau_works_correctly() {
         let threshold = (Chunk::DIAMETER / 2).as_();
         let terrain = Terrain::default().with_block_generator(
-            |_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
+            |_height_map: &HeightMap, p: &Point3<FieldOf<OctreeOf<Chunk>>>| {
                 if p.y < threshold {
                     Some(1)
                 } else {
@@ -158,7 +171,7 @@ mod test {
         let chunk_half = chunk_size / 2;
         let chunk_quarter = chunk_half / 2;
         let terrain = Terrain::default().with_block_generator(
-            |_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
+            |_height_map: &HeightMap, p: &Point3<FieldOf<OctreeOf<Chunk>>>| {
                 let x = p.x as isize - chunk_half;
                 let y = p.y as isize - chunk_half;
                 let z = p.z as isize - chunk_half;

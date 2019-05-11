@@ -1,6 +1,6 @@
+use crate::iter_tools::all_equal;
 use crate::octree::*;
 use amethyst::core::nalgebra::Scalar;
-use itertools::Itertools;
 
 pub trait Compress {
     fn compress_nodes(self) -> Self;
@@ -18,7 +18,7 @@ where
         use LevelData::*;
         match &self.data {
             Node(ref nodes) => {
-                if { nodes.iter().map(|node| node.data()).all_equal() } {
+                if { all_equal(nodes.iter().map(|node| node.data())) } {
                     let head: DataOf<O> = nodes[0].data().clone();
                     self.with_data(head.into())
                 } else {

@@ -1,5 +1,6 @@
 use crate::{
     chunk::Chunk,
+    field::*,
     terrain::{DefaultGenerateBlock, Terrain},
 };
 use amethyst::core::nalgebra::Point3;
@@ -77,7 +78,7 @@ impl Dimension {
         point: P,
     ) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
-        P: Borrow<Point3<i32>>,
+        P: Borrow<Point3<FieldOf<Chunk>>>,
     {
         if self.chunk_file_exists(dimension_dir.as_ref(), morton) {
             self.storage.load(dimension_dir, morton)
@@ -98,7 +99,7 @@ impl Dimension {
 
     pub fn create<P>(&mut self, pos: P)
     where
-        P: Borrow<Point3<i32>>,
+        P: Borrow<Point3<FieldOf<Chunk>>>,
     {
         let point = pos.borrow();
         let morton: MortonCode = pos.borrow().into();

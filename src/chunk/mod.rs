@@ -1,14 +1,13 @@
+use crate::field::*;
 use crate::octree::{
-    Diameter, ElementOf, ElementType, FieldOf, FieldType, Get, Insert, Map, Octree, Octree8,
-    OctreeLike, OctreeTypes, PositionOf,
+    Diameter, ElementOf, ElementType, Get, Insert, Map, Octree, OctreeLike, OctreeTypes, PositionOf,
 };
 use alga::general::ClosedDiv;
 use amethyst::{
-    core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
+    core::nalgebra::{Point3, Scalar, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
 };
 use num_traits::{AsPrimitive, NumCast};
-use rayon::iter::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Borrow;
 use typenum::U64;
@@ -33,23 +32,23 @@ impl HasOctree for Chunk {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Chunk {
-    pub pos: Point3<i32>,
+    pub pos: Point3<FieldOf<Chunk>>,
     octree: OctreeOf<Self>,
 }
 
 impl Chunk {
-    pub fn new(pos: Point3<i32>, octree: OctreeOf<Chunk>) -> Self {
+    pub fn new(pos: Point3<FieldOf<Chunk>>, octree: OctreeOf<Chunk>) -> Self {
         Chunk { pos, octree }
     }
 
-    pub fn with_block(pos: Point3<i32>, block: Block) -> Self {
+    pub fn with_block(pos: Point3<FieldOf<Chunk>>, block: Block) -> Self {
         Chunk {
             pos,
             octree: <Chunk as HasOctree>::Octree::at_origin(Some(block)),
         }
     }
 
-    pub fn with_empty(pos: Point3<i32>) -> Self {
+    pub fn with_empty(pos: Point3<FieldOf<Chunk>>) -> Self {
         Chunk {
             pos,
             octree: <Chunk as HasOctree>::Octree::at_origin(None),
@@ -92,18 +91,18 @@ impl Chunk {
         )
     }
 
-    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<i32>) -> Point3<N>
+    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<FieldOf<Chunk>>) -> Point3<N>
     where
         N: Scalar,
-        i32: AsPrimitive<N>,
+        FieldOf<Chunk>: AsPrimitive<N>,
     {
         let translated = chunk_pos * Chunk::DIAMETER.as_();
         Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
     }
 
-    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<i32>
+    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<FieldOf<Chunk>>
     where
-        N: Scalar + ClosedDiv + AsPrimitive<i32> + NumCast,
+        N: Scalar + ClosedDiv + AsPrimitive<FieldOf<Chunk>> + NumCast,
         usize: AsPrimitive<N>,
     {
         let n_diameter = Chunk::DIAMETER.as_();
@@ -128,11 +127,12 @@ impl<'a> IntoIterator for &'a Chunk {
     }
 }
 
+// Unlike ElementType FieldType is the coordinate type for Chunks which is i32 (not u8 the field of the Octree).
+impl FieldType for Chunk {
+    type Field = i32;
+}
 impl ElementType for Chunk {
     type Element = ElementOf<OctreeOf<Chunk>>;
-}
-impl FieldType for Chunk {
-    type Field = FieldOf<OctreeOf<Chunk>>;
 }
 impl Diameter for Chunk where {
     type Diameter = <OctreeOf<Chunk> as Diameter>::Diameter;

@@ -1,4 +1,5 @@
-use crate::octree::descriptors::{ElementType, FieldType, HasPosition, Number};
+use crate::field::*;
+use crate::octree::descriptors::{ElementType, HasPosition};
 use crate::octree::{Diameter, LevelData::*, OctreeBase, OctreeLevel, PositionOf};
 use std::borrow::Borrow;
 

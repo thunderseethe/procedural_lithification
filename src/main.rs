@@ -25,6 +25,7 @@ use cubes_lib::{
     chunk::Chunk,
     collision::{CollisionDetection, CollisionId},
     dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
+    field::*,
     systems::{
         collision::CheckPlayerCollisionSystem,
         dimension::{DimensionBundle, DimensionChunkEvent, DimensionChunkEvent::NewChunkAt},
@@ -178,8 +179,11 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for Gameplay {
                 let generate_queue_set_ref = &self.generate_queue_set;
                 let channel_ref = &channel;
                 let dimension_dir = self.dimension_config.directory.as_path();
-                for point in Sphere::new(player_chunk, self.dimension_config.generate_radius as i32)
-                    .into_iter()
+                for point in Sphere::new(
+                    player_chunk,
+                    self.dimension_config.generate_radius as FieldOf<Chunk>,
+                )
+                .into_iter()
                 {
                     s.spawn(move |_| {
                         let dimension = Arc::clone(dimension_ref);

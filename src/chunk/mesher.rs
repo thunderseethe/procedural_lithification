@@ -1,3 +1,4 @@
+use crate::field::*;
 use crate::octree::octant::{Octant, OctantFace};
 use crate::octree::*;
 use crate::volume::Cuboid;

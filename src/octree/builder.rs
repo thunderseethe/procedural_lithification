@@ -1,7 +1,7 @@
 use crate::dimension::morton_code::MortonCode;
+use crate::iter_tools::all_equal;
 use crate::octree::*;
 use either::Either;
-use itertools::Itertools;
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 
@@ -23,17 +23,6 @@ where
     fn build_octree(data: &[Option<E>], _morton_raw: usize) -> Either<Option<E>, Self> {
         Either::Left(data[0])
     }
-}
-
-#[inline]
-fn all_equal<I>(mut iter: I) -> bool
-where
-    I: Iterator,
-    I::Item: PartialEq,
-{
-    iter.next()
-        .map(|head| iter.all(|ele| head == ele))
-        .unwrap_or(true)
 }
 
 impl<O> FromRawTree for OctreeLevel<O>

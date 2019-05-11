@@ -1,4 +1,5 @@
 use crate::chunk::Chunk;
+use crate::field::*;
 use amethyst::core::nalgebra as na;
 use amethyst::core::nalgebra::Point3;
 use amethyst::ecs::{Component, VecStorage};
@@ -36,7 +37,7 @@ pub enum CollisionDetectionError {
 // better name
 pub struct CollisionDetection {
     world: CollisionWorld<f32, ShapeHandle<f32>>,
-    terrain_handles: HashMap<Point3<i32>, Vec<CollisionObjectHandle>>,
+    terrain_handles: HashMap<Point3<FieldOf<Chunk>>, Vec<CollisionObjectHandle>>,
 }
 
 impl CollisionDetection {
@@ -82,7 +83,7 @@ impl CollisionDetection {
         let terrain_handles = chunk
             .iter()
             .map(|octant| {
-                let rel_pos: Point3<i32> = na::convert(*octant.bottom_left_front);
+                let rel_pos: Point3<FieldOf<Chunk>> = na::convert(*octant.bottom_left_front);
                 let pos: Point3<f32> = na::convert(root + rel_pos.coords);
                 let radius = (octant.diameter / 2) as f32;
                 let isometry =
@@ -125,8 +126,8 @@ impl CollisionDetection {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::chunk::Chunk;
-    use crate::octree::{Diameter, FieldOf};
+    use crate::chunk::{Chunk, OctreeOf};
+    use crate::octree::Diameter;
     use crate::terrain::{HeightMap, Terrain};
     use amethyst::core::nalgebra::Point3;
     use ncollide3d::math::{Point, Vector};
@@ -137,13 +138,15 @@ mod test {
         let mut world = CollisionDetection::new();
         let _player_handle = world.add_player(Point3::origin());
         let chunk = Terrain::default()
-            .with_block_generator(|_height_map: &HeightMap, p: &Point3<FieldOf<Chunk>>| {
-                if p.y < (Chunk::DIAMETER / 2) as u8 {
-                    Some(1)
-                } else {
-                    None
-                }
-            })
+            .with_block_generator(
+                |_height_map: &HeightMap, p: &Point3<FieldOf<OctreeOf<Chunk>>>| {
+                    if p.y < (Chunk::DIAMETER / 2) as u8 {
+                        Some(1)
+                    } else {
+                        None
+                    }
+                },
+            )
             .generate_chunk(Point3::origin());
         world
             .add_chunk(&chunk)
