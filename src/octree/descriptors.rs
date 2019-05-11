@@ -1,16 +1,11 @@
 //! Contains traits that describe properties of an Octree and it's data.
 use super::*;
-use alga::general::{ClosedAdd, ClosedSub};
-use num_traits::Num;
-use std::ops::{Shl, Shr};
+use crate::field::{FieldOf, FieldType, Number};
 use typenum::{Bit, PowerOfTwo, UInt, Unsigned, B0, U1};
 // Hello, it's your good pal bottom up recursion. Now with types
 
 pub trait ElementType {
     type Element;
-}
-pub trait FieldType {
-    type Field: Number;
 }
 
 impl<E, N: Scalar> ElementType for OctreeBase<E, N> {
@@ -43,32 +38,6 @@ impl<O: OctreeTypes> FieldType for OctreeLevel<O> {
 /// This prevents each octree from requiring it's own E and N parameters and ensures that all levels of the Octree are using the same Element and Field.
 pub trait OctreeTypes: ElementType + FieldType {}
 impl<T> OctreeTypes for T where T: ElementType + FieldType {}
-
-/// Composite trait desciribing a numerical type that can be used for the coordinates of an Octree.
-pub trait Number:
-    Scalar
-    + Num
-    + NumCast
-    + PartialOrd
-    + ClosedSub
-    + ClosedAdd
-    + Shr<Self, Output = Self>
-    + Shl<Self, Output = Self>
-    + AsPrimitive<usize>
-{
-}
-impl<T> Number for T where
-    T: Scalar
-        + Num
-        + NumCast
-        + PartialOrd
-        + ClosedSub
-        + ClosedAdd
-        + Shr<Self, Output = Self>
-        + Shl<Self, Output = Self>
-        + AsPrimitive<usize>
-{
-}
 
 /// Trait to unify our OctreeBase::Data and OctreeLevel::Data empty nodes.
 /// This trait in tandem with (Leaf)[trait.Leaf.html] allows for operations on the Octree to refer to their particular type's Data generically

@@ -6,10 +6,9 @@ use std::iter::Iterator;
 
 use crate::chunk::block::Block;
 use crate::chunk::{Chunk, OctreeOf, HasOctree};
+use crate::field::*;
 use crate::octree::*;
-use crate::octree::{
-    octant::OctantId
-};
+use crate::octree::octant::OctantId;
 
 #[derive(ToPrimitive, FromPrimitive, Clone, Copy)]
 enum NodeVariant {
@@ -229,7 +228,7 @@ impl<E, N: Number> ConstructTree for OctreeBase<E, N> {
         Self::new(data, pos)
     }
 }
-pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
+pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<FieldOf<Chunk>>) -> Chunk {
     let (nodes, blocks) = bytes_to_chunk_lists(bytes);
     let (mut nodes, mut blocks) = (nodes.into_iter(), blocks.into_iter());
     let root: OctreeOf<Chunk> = <Chunk as HasOctree>::Octree::construct_tree(&mut nodes, &mut blocks, Point3::origin());
@@ -241,7 +240,7 @@ pub fn bytes_to_chunk(bytes: &Vec<u8>, chunk_pos: Point3<i32>) -> Chunk {
 
 pub struct ChunkDeserialize;
 impl ChunkDeserialize {
-    pub fn from<R>(mut reader: R, pos: Point3<i32>) -> std::io::Result<Chunk>
+    pub fn from<R>(mut reader: R, pos: Point3<FieldOf<Chunk>>) -> std::io::Result<Chunk>
     where
         R: std::io::Read,
     {

@@ -83,27 +83,25 @@ impl<'a> System<'a> for RenderDimensionSystem {
                         .get_chunk(*morton)
                         .map(|chunk_mutex| chunk_mutex.lock())
                         .and_then(|chunk| chunk.generate_mesh())
-                        .map(|mesh_datums| {
-                            for (p, mesh_data) in mesh_datums {
-                                let mut pos = Transform::default();
-                                pos.set_xyz(p.x, p.y, p.z);
-                                entities
-                                    .build_entity()
-                                    .with(ChunkTag(*morton), &mut chunk_tags)
-                                    .with(pos, &mut transforms)
-                                    .with(
-                                        mesh_loader.load_from_data(mesh_data.clone(), ()),
-                                        &mut meshes,
-                                    )
-                                    .with(
-                                        Material {
-                                            albedo: self.albedo.clone().unwrap(),
-                                            ..material_defaults.0.clone()
-                                        },
-                                        &mut materials,
-                                    )
-                                    .build();
-                            }
+                        .map(|(p, mesh_data)| {
+                            let mut pos = Transform::default();
+                            pos.set_xyz(p.x, p.y, p.z);
+                            entities
+                                .build_entity()
+                                .with(ChunkTag(*morton), &mut chunk_tags)
+                                .with(pos, &mut transforms)
+                                .with(
+                                    mesh_loader.load_from_data(mesh_data.clone(), ()),
+                                    &mut meshes,
+                                )
+                                .with(
+                                    Material {
+                                        albedo: self.albedo.clone().unwrap(),
+                                        ..material_defaults.0.clone()
+                                    },
+                                    &mut materials,
+                                )
+                                .build();
                         });
                 }
             }

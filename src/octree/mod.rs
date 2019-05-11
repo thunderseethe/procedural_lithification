@@ -1,7 +1,8 @@
-/// Module contains two structs, OctreeBase and OctreeLevel.
-/// These can be combined recursively to form an Octree of a static height.
-/// For example an Octree of height 3 would have type OctreeLevel<OctreeLevel<OctreeBase<E, N>>>.
-/// This is relatively verbose but allows the rust compiler to optimize our octrees recursive methods better than general unbounded recursion.
+//! Module contains two structs, OctreeBase and OctreeLevel.
+//! These can be combined recursively to form an Octree of a static height.
+//! For example an Octree of height 3 would have type OctreeLevel<OctreeLevel<OctreeBase<E, N>>>.
+//! This is relatively verbose but allows the rust compiler to optimize our octrees recursive methods better than general unbounded recursion.
+use crate::field::*;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::*;
 use serde::ser::SerializeStruct;
@@ -31,7 +32,6 @@ pub type Ref<T> = Arc<T>;
 pub type DataOf<T> = <T as HasData>::Data;
 pub type PositionOf<T> = <T as HasPosition>::Position;
 pub type ElementOf<T> = <T as ElementType>::Element;
-pub type FieldOf<T> = <T as FieldType>::Field;
 
 /// Composite trait to describe the full functionality of an Octree
 /// This trait exists mostly for convenience when parametizing over an Octree

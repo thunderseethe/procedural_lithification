@@ -1,5 +1,6 @@
 use super::HasOctree;
 use crate::chunk::{Chunk, OctreeOf};
+use crate::field::*;
 use crate::octree::builder::*;
 use amethyst::core::nalgebra::Point3;
 use rayon::iter::*;
@@ -17,7 +18,7 @@ where
 
 pub struct ChunkBuilder(<OctreeOf<Chunk> as Builder>::Builder);
 impl ChunkBuilder {
-    pub fn build(self, point: Point3<i32>) -> Chunk {
+    pub fn build(self, point: Point3<FieldOf<Chunk>>) -> Chunk {
         Chunk {
             pos: point,
             octree: self.0.build(),

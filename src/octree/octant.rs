@@ -1,5 +1,5 @@
 use super::descriptors::HasPosition;
-use crate::octree::descriptors::Number;
+use crate::field::Number;
 use alga::general::ClosedAdd;
 use amethyst::core::nalgebra::{Point3, Scalar};
 use num_traits::{AsPrimitive, FromPrimitive};

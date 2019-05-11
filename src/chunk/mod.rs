@@ -1,16 +1,16 @@
+use crate::field::*;
 use crate::octree::{
-    Diameter, ElementOf, ElementType, FieldOf, FieldType, Get, Insert, Map, Octree, Octree8,
-    OctreeLike, OctreeTypes, PositionOf,
+    Diameter, ElementOf, ElementType, Get, Insert, Map, Octree, OctreeLike, OctreeTypes, PositionOf,
 };
 use alga::general::ClosedDiv;
 use amethyst::{
-    core::nalgebra::{convert, Point3, Scalar, Vector2, Vector3},
+    core::nalgebra::{Point3, Scalar, Vector2, Vector3},
     renderer::{MeshData, PosNormTex},
 };
 use num_traits::{AsPrimitive, NumCast};
-use rayon::iter::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Borrow;
+use typenum::U64;
 
 pub mod block;
 pub mod chunk_builder;
@@ -20,28 +20,38 @@ pub mod mesher;
 use block::Block;
 use mesher::Mesher;
 
+// Shorthand to access Octree of type that implements HasOctree.
+pub type OctreeOf<T> = <T as HasOctree>::Octree;
+
+pub trait HasOctree: OctreeTypes + Diameter {
+    type Octree: OctreeLike;
+}
+impl HasOctree for Chunk {
+    type Octree = Octree<Block, u8, U64>;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Chunk {
-    pub pos: Point3<i32>,
+    pub pos: Point3<FieldOf<Chunk>>,
     octree: OctreeOf<Self>,
 }
 
 impl Chunk {
-    pub fn new(pos: Point3<i32>, octree: Octree8<Block, u8>) -> Self {
+    pub fn new(pos: Point3<FieldOf<Chunk>>, octree: OctreeOf<Chunk>) -> Self {
         Chunk { pos, octree }
     }
 
-    pub fn with_block(pos: Point3<i32>, block: Block) -> Self {
+    pub fn with_block(pos: Point3<FieldOf<Chunk>>, block: Block) -> Self {
         Chunk {
             pos,
-            octree: Octree8::at_origin(Some(block)),
+            octree: <Chunk as HasOctree>::Octree::at_origin(Some(block)),
         }
     }
 
-    pub fn with_empty(pos: Point3<i32>) -> Self {
+    pub fn with_empty(pos: Point3<FieldOf<Chunk>>) -> Self {
         Chunk {
             pos,
-            octree: Octree8::at_origin(None),
+            octree: <Chunk as HasOctree>::Octree::at_origin(None),
         }
     }
 
@@ -60,86 +70,39 @@ impl Chunk {
         self
     }
 
-    pub fn generate_mesh(&self) -> Option<Vec<(Point3<f32>, MeshData)>> {
+    pub fn generate_mesh(&self) -> Option<(Point3<f32>, MeshData)> {
         let chunk_render_pos: Point3<f32> = Chunk::chunk_to_absl_coords(self.pos);
+
         self.octree.map(
             || None,
             |_| {
-                // Trivial cube
-                let mesh = cube_mesh(Chunk::DIAMETER as f32).into();
-                Some(vec![(chunk_render_pos, mesh)])
+                Some((
+                    chunk_render_pos,
+                    cube_mesh(self.octree.diameter() as f32).into(),
+                ))
             },
-            |children| {
-                Some(
-                    children
-                        .par_iter()
-                        .flat_map(|octree| {
-                            octree.map(
-                                || vec![],
-                                |_| {
-                                    let octree_offset: Vector3<f32> =
-                                        convert(octree.root_point().coords);
-                                    let mesh = cube_mesh(octree.diameter() as f32).into();
-                                    vec![(chunk_render_pos + octree_offset, mesh)]
-                                },
-                                |children| {
-                                    children
-                                        .par_iter()
-                                        .filter_map(|octree| {
-                                            use typenum::U64;
-                                            let octree_root_offset: Vector3<f32> =
-                                                convert(octree.root_point().coords);
-
-                                            octree.map(
-                                                || None,
-                                                |_| {
-                                                    Some((
-                                                        chunk_render_pos + octree_root_offset,
-                                                        cube_mesh(octree.diameter() as f32).into(),
-                                                    ))
-                                                },
-                                                |_| {
-                                                    let mesher =
-                                                        Mesher::<Octree<Block, u8, U64>>::new(
-                                                            octree.as_ref(),
-                                                        );
-                                                    let quads = mesher.generate_quads_array();
-                                                    let mut mesh_data: Vec<PosNormTex> =
-                                                        Vec::with_capacity(quads.len() * 6);
-                                                    mesh_data.extend(
-                                                        quads
-                                                            .into_iter()
-                                                            .flat_map(|quad| quad.mesh_coords()),
-                                                    );
-                                                    Some((
-                                                        chunk_render_pos + octree_root_offset,
-                                                        mesh_data.into(),
-                                                    ))
-                                                },
-                                            )
-                                        })
-                                        .collect::<Vec<(Point3<f32>, MeshData)>>()
-                                },
-                            )
-                        })
-                        .collect(),
-                )
+            |_| {
+                let mesher = Mesher::<Octree<Block, u8, U64>>::new(&self.octree);
+                let quads = mesher.generate_quads_array();
+                let mut mesh_data: Vec<PosNormTex> = Vec::with_capacity(quads.len() * 6);
+                mesh_data.extend(quads.into_iter().flat_map(|quad| quad.mesh_coords()));
+                Some((chunk_render_pos, mesh_data.into()))
             },
         )
     }
 
-    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<i32>) -> Point3<N>
+    pub fn chunk_to_absl_coords<N>(chunk_pos: Point3<FieldOf<Chunk>>) -> Point3<N>
     where
         N: Scalar,
-        i32: AsPrimitive<N>,
+        FieldOf<Chunk>: AsPrimitive<N>,
     {
         let translated = chunk_pos * Chunk::DIAMETER.as_();
         Point3::new(translated.x.as_(), translated.y.as_(), translated.z.as_())
     }
 
-    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<i32>
+    pub fn absl_to_chunk_coords<N>(absl_pos: Point3<N>) -> Point3<FieldOf<Chunk>>
     where
-        N: Scalar + ClosedDiv + AsPrimitive<i32> + NumCast,
+        N: Scalar + ClosedDiv + AsPrimitive<FieldOf<Chunk>> + NumCast,
         usize: AsPrimitive<N>,
     {
         let n_diameter = Chunk::DIAMETER.as_();
@@ -164,21 +127,12 @@ impl<'a> IntoIterator for &'a Chunk {
     }
 }
 
-// Shorthand to access Octree of type that implements HasOctree.
-pub type OctreeOf<T> = <T as HasOctree>::Octree;
-
-pub trait HasOctree: OctreeTypes + Diameter {
-    type Octree: OctreeLike;
+// Unlike ElementType FieldType is the coordinate type for Chunks which is i32 (not u8 the field of the Octree).
+impl FieldType for Chunk {
+    type Field = i32;
 }
-impl HasOctree for Chunk {
-    type Octree = Octree8<Block, u8>;
-}
-
 impl ElementType for Chunk {
     type Element = ElementOf<OctreeOf<Chunk>>;
-}
-impl FieldType for Chunk {
-    type Field = FieldOf<OctreeOf<Chunk>>;
 }
 impl Diameter for Chunk where {
     type Diameter = <OctreeOf<Chunk> as Diameter>::Diameter;

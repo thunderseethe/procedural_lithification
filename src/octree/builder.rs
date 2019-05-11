@@ -1,7 +1,7 @@
 use crate::dimension::morton_code::MortonCode;
+use crate::iter_tools::all_equal;
 use crate::octree::*;
 use either::Either;
-use itertools::Itertools;
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 
@@ -44,7 +44,7 @@ where
             O::build_octree(&data[start..end], morton_raw + start)
         });
         // If all our children are equal we don't want to construct an octree and instead defer up the call stack
-        if childrens.clone().all_equal() {
+        if all_equal(childrens.clone()) {
             childrens.next().unwrap().map_right(|lower| {
                 // This code generally won't be run but in the case we have 8 equal Either::Rights combine there data to construct an Octree that's one level higher
                 Self::new(
@@ -247,5 +247,26 @@ impl<'a, T: Send> Producer for SliceProducer<'a, T> {
             SliceProducer { slice: left },
             SliceProducer { slice: right },
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::octree::Octree;
+    use typenum::*;
+
+    #[test]
+    fn test_raw_tree_size_matches_octree_size() {
+        let raw_tree = Octree::<u32, u8, U64>::raw_tree();
+
+        assert_eq!(raw_tree.0.len(), 262144);
+    }
+
+    #[test]
+    fn test_builder_uses_expected_raw_tree_for_octree() {
+        let builder = Octree::<u32, u8, U128>::builder();
+
+        assert_eq!(builder.data.0.len(), 2097152);
     }
 }
