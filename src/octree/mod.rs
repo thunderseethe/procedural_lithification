@@ -347,7 +347,7 @@ impl<O: OctreeTypes> OctreeLevel<O> {
     /// For example:
     ///
     /// ```
-    /// let octree: Octree8<u32, u8> = Octree8::at_origin(None);
+    /// let octree: Octree<u32, u8, U256> = Octree8::at_origin(None);
     /// assert_eq!(octree.root_point(), Point3::origin())
     /// ```
     pub fn root_point(&self) -> &<Self as HasPosition>::Position {

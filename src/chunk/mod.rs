@@ -298,29 +298,3 @@ fn pos_norm_tex(
         tex_coord,
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::{Chunk, Point3};
-    use std::collections::HashSet;
-
-    #[test]
-    fn test_chunk_insertions() {
-        let mut points = HashSet::new();
-        let mut chunk = Chunk::with_empty(Point3::origin());
-        for _ in 0..1000 {
-            let p = Point3::new(
-                rand::random::<u8>().into(),
-                rand::random::<u8>().into(),
-                rand::random::<u8>().into(),
-            );
-            chunk.place_block(&p, 1234);
-            points.insert(p);
-        }
-
-        for point in points {
-            assert_eq!(chunk.get_block(point), Some(1234));
-        }
-    }
-
-}

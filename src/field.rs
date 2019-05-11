@@ -1,7 +1,7 @@
 use alga::general::{ClosedAdd, ClosedSub};
 use amethyst::core::nalgebra::Scalar;
 use num_traits::{AsPrimitive, Num, NumCast};
-use std::ops::{Shl, Shr};
+use std::ops::{BitOr, Shl, Shr};
 
 /// Trait representing a type that has some associated Field
 pub trait FieldType {
@@ -21,6 +21,7 @@ pub trait Number:
     + ClosedAdd
     + Shr<Self, Output = Self>
     + Shl<Self, Output = Self>
+    + BitOr<Output = Self>
     + AsPrimitive<usize>
 {
 }
@@ -33,6 +34,7 @@ impl<T> Number for T where
         + ClosedAdd
         + Shr<Self, Output = Self>
         + Shl<Self, Output = Self>
+        + BitOr<Output = Self>
         + AsPrimitive<usize>
 {
 }

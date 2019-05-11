@@ -24,7 +24,7 @@ use amethyst::{
 use cubes_lib::{
     chunk::Chunk,
     collision::{CollisionDetection, CollisionId},
-    dimension::{Dimension, DimensionConfig},
+    dimension::{ChunkMortonCode, Dimension, DimensionConfig},
     field::*,
     morton_code::MortonCode,
     systems::{
@@ -41,7 +41,7 @@ use tokio::runtime::Runtime;
 struct Gameplay {
     dimension_config: DimensionConfig,
     // Holds points that have been queued for generation so we don't re generate them
-    generate_queue_set: Arc<Mutex<HashSet<MortonCode>>>,
+    generate_queue_set: Arc<Mutex<HashSet<ChunkMortonCode>>>,
 }
 
 impl Gameplay {

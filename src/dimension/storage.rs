@@ -1,5 +1,6 @@
+use super::ChunkMortonCode;
 use crate::chunk::file_format::{ChunkDeserialize, ChunkSerialize};
-use crate::{chunk::Chunk, morton_code::MortonCode};
+use crate::chunk::Chunk;
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use rayon::iter::{
@@ -12,7 +13,7 @@ const CHUNK_DIR: &'static str = "chunk";
 
 pub struct DimensionStorage {
     // The RwLock around indices is used to control access to data and entities.
-    indices: RwLock<Vec<MortonCode>>,
+    indices: RwLock<Vec<ChunkMortonCode>>,
     data: Vec<Mutex<Chunk>>,
 }
 
@@ -40,9 +41,9 @@ impl DimensionStorage {
         chunk: Chunk,
     ) -> (MutexGuard<'a, Chunk>, Option<Chunk>)
     where
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
-        let morton: MortonCode = pos.into();
+        let morton: ChunkMortonCode = pos.into();
         let mut indices = self.indices.write();
         match indices.binary_search(&morton) {
             Err(indx) => {
@@ -59,7 +60,7 @@ impl DimensionStorage {
 
     pub fn contains<M>(&self, pos: M) -> bool
     where
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
         self.indices.read().binary_search(&pos.into()).is_ok()
     }
@@ -67,7 +68,7 @@ impl DimensionStorage {
     pub fn chunk_exists<P, M>(&self, dir: P, pos: M) -> bool
     where
         P: AsRef<Path>,
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
         dir.as_ref()
             .join(CHUNK_DIR)
@@ -78,14 +79,14 @@ impl DimensionStorage {
     pub fn load<'a, P, M>(&'a mut self, dir: P, pos: M) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
         P: AsRef<Path>,
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
         let morton = pos.into();
         let chunk_path = dir.as_ref().join(CHUNK_DIR).join(format!("{}", morton));
         SyncFile::open(chunk_path)
             .and_then(|file| {
                 let decoder = DeflateDecoder::new(file);
-                ChunkDeserialize::from(decoder, morton.as_point().unwrap())
+                ChunkDeserialize::from(decoder, morton.as_point())
             })
             .map(move |chunk| {
                 // We're overwriting whatever was previously present at this index.
@@ -102,9 +103,9 @@ impl DimensionStorage {
 
     pub fn get<'a, M>(&'a self, pos: M) -> Option<&'a Mutex<Chunk>>
     where
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
-        let morton: MortonCode = pos.into();
+        let morton: ChunkMortonCode = pos.into();
         let indices = self.indices.read();
         match indices.binary_search(&morton) {
             Err(_) => None,
