@@ -1,4 +1,4 @@
-use crate::dimension::morton_code::MortonCode;
+use crate::morton_code::MortonCode;
 use amethyst::{
     core::{
         bundle::{Result, SystemBundle},

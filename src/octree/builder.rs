@@ -1,5 +1,5 @@
-use crate::dimension::morton_code::MortonCode;
 use crate::iter_tools::all_equal;
+use crate::morton_code::MortonCode;
 use crate::octree::*;
 use either::Either;
 use rayon::iter::plumbing::*;

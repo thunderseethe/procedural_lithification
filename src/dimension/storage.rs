@@ -1,5 +1,5 @@
 use crate::chunk::file_format::{ChunkDeserialize, ChunkSerialize};
-use crate::{chunk::Chunk, dimension::morton_code::MortonCode};
+use crate::{chunk::Chunk, morton_code::MortonCode};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use rayon::iter::{

@@ -25,6 +25,7 @@ pub mod chunk;
 pub mod collision;
 pub mod dimension;
 pub mod field;
+pub mod morton_code;
 pub mod octree;
 pub mod systems;
 pub mod terrain;

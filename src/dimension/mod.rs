@@ -1,6 +1,7 @@
 use crate::{
     chunk::Chunk,
     field::*,
+    morton_code::MortonCode,
     terrain::{DefaultGenerateBlock, Terrain},
 };
 use amethyst::core::nalgebra::Point3;
@@ -11,10 +12,8 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
-pub mod morton_code;
 mod storage;
 
-use morton_code::MortonCode;
 use storage::DimensionStorage;
 
 pub struct DimensionConfig {
