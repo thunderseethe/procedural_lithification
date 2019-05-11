@@ -24,8 +24,9 @@ use amethyst::{
 use cubes_lib::{
     chunk::Chunk,
     collision::{CollisionDetection, CollisionId},
-    dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
+    dimension::{Dimension, DimensionConfig},
     field::*,
+    morton_code::MortonCode,
     systems::{
         collision::CheckPlayerCollisionSystem,
         dimension::{DimensionBundle, DimensionChunkEvent, DimensionChunkEvent::NewChunkAt},
