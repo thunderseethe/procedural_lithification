@@ -1,6 +1,7 @@
 extern crate amethyst;
 extern crate cubes_lib;
 extern crate dirs;
+extern crate morton_code;
 extern crate parking_lot;
 extern crate tokio;
 
@@ -24,7 +25,7 @@ use amethyst::{
 use cubes_lib::{
     chunk::Chunk,
     collision::{CollisionDetection, CollisionId},
-    dimension::{morton_code::MortonCode, Dimension, DimensionConfig},
+    dimension::{ChunkMortonCode, Dimension, DimensionConfig},
     field::*,
     systems::{
         collision::CheckPlayerCollisionSystem,
@@ -33,6 +34,7 @@ use cubes_lib::{
     },
     volume::Sphere,
 };
+use morton_code::MortonCode;
 use parking_lot::Mutex;
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
@@ -40,7 +42,7 @@ use tokio::runtime::Runtime;
 struct Gameplay {
     dimension_config: DimensionConfig,
     // Holds points that have been queued for generation so we don't re generate them
-    generate_queue_set: Arc<Mutex<HashSet<MortonCode>>>,
+    generate_queue_set: Arc<Mutex<HashSet<ChunkMortonCode>>>,
 }
 
 impl Gameplay {

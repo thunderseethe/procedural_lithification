@@ -1,4 +1,4 @@
-use crate::dimension::morton_code::MortonCode;
+use crate::dimension::ChunkMortonCode;
 use amethyst::{
     core::{
         bundle::{Result, SystemBundle},
@@ -11,10 +11,10 @@ pub mod render_dimension;
 use crate::systems::dimension::render_dimension::RenderDimensionSystem;
 
 pub enum DimensionChunkEvent {
-    NewChunkAt(MortonCode),
+    NewChunkAt(ChunkMortonCode),
 }
 
-pub struct ChunkTag(MortonCode);
+pub struct ChunkTag(ChunkMortonCode);
 impl Component for ChunkTag {
     type Storage = VecStorage<Self>;
 }

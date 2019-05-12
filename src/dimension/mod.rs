@@ -3,6 +3,7 @@ use crate::{
     field::*,
     terrain::{DefaultGenerateBlock, Terrain},
 };
+use morton_code::MortonCode;
 use amethyst::core::nalgebra::Point3;
 use parking_lot::{Mutex, MutexGuard};
 use std::{
@@ -11,10 +12,8 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
-pub mod morton_code;
 mod storage;
 
-use morton_code::MortonCode;
 use storage::DimensionStorage;
 
 pub struct DimensionConfig {
@@ -43,6 +42,7 @@ pub struct Dimension {
     storage: DimensionStorage,
 }
 
+pub type ChunkMortonCode = MortonCode<FieldOf<Chunk>>;
 unsafe impl Sync for Dimension {}
 
 impl Default for Dimension {
@@ -53,28 +53,27 @@ impl Default for Dimension {
         }
     }
 }
-
 impl Dimension {
     pub fn new() -> Self {
         Dimension::default()
     }
 
-    pub fn chunk_exists<M: Into<MortonCode>>(&self, pos: M) -> bool {
+    pub fn chunk_exists<M: Into<ChunkMortonCode>>(&self, pos: M) -> bool {
         self.storage.get(pos.into()).is_some()
     }
 
     pub fn chunk_file_exists<P, PATH: AsRef<Path>>(&self, dimension_dir: PATH, pos: P) -> bool
     where
-        P: Into<MortonCode>,
+        P: Into<ChunkMortonCode>,
     {
-        let morton: MortonCode = pos.into();
+        let morton: ChunkMortonCode = pos.into();
         self.storage.chunk_exists(dimension_dir, morton)
     }
 
     pub fn _create_or_load_chunk<'a, P, PATH: AsRef<Path>>(
         &'a mut self,
         dimension_dir: PATH,
-        morton: MortonCode,
+        morton: ChunkMortonCode,
         point: P,
     ) -> std::io::Result<MutexGuard<'a, Chunk>>
     where
@@ -92,7 +91,7 @@ impl Dimension {
 
     pub fn get_chunk<M>(&self, morton: M) -> Option<&Mutex<Chunk>>
     where
-        M: Into<MortonCode>,
+        M: Into<ChunkMortonCode>,
     {
         self.storage.get(morton)
     }
@@ -102,7 +101,7 @@ impl Dimension {
         P: Borrow<Point3<FieldOf<Chunk>>>,
     {
         let point = pos.borrow();
-        let morton: MortonCode = pos.borrow().into();
+        let morton: ChunkMortonCode = pos.borrow().into();
         let chunk = self.terrain.generate_chunk(point);
         self.storage.insert(morton, chunk);
     }

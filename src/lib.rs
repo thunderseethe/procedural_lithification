@@ -13,13 +13,13 @@ extern crate itertools;
 extern crate ncollide3d;
 extern crate noise;
 extern crate num_traits;
+extern crate morton_code;
 extern crate parallel_array_init;
 extern crate parking_lot;
 extern crate rand;
 extern crate rayon;
 extern crate serde;
 extern crate tokio;
-extern crate toolshed;
 
 pub mod chunk;
 pub mod collision;

@@ -35,11 +35,14 @@ serde = { version = "1.0", features = ["rc"] }
 serde_derive = "1.0"
 shred = { version = "0.7" }
 tokio = "0.1.15"
-toolshed = "0.8.0"
 typenum = "1.10.0"
 
 [dependencies.parallel_array_init]
 path = "./lib/parallel_array_init"
+version = "0.1.0"
+
+[dependencies.morton_code]
+path = "./lib/morton_code"
 version = "0.1.0"
 
 [[bench]]

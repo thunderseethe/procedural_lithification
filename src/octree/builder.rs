@@ -1,7 +1,8 @@
-use crate::dimension::morton_code::MortonCode;
 use crate::iter_tools::all_equal;
 use crate::octree::*;
 use either::Either;
+use num_traits::AsPrimitive;
+use morton_code::{IntoBytes, LUTType, MortonCode, MortonStorage};
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 
@@ -29,7 +30,10 @@ impl<O> FromRawTree for OctreeLevel<O>
 where
     O: FromRawTree + Clone + OctreeTypes + Diameter + PartialEq + HasData + New,
     ElementOf<O>: Clone + PartialEq,
+    FieldOf<O>: IntoBytes + MortonStorage,
     DataOf<Self>: From<DataOf<O>>,
+    LUTType: AsPrimitive<FieldOf<O>> + AsPrimitive<<FieldOf<O> as MortonStorage>::Storage>,
+    usize: AsPrimitive<<FieldOf<O> as MortonStorage>::Storage>,
 {
     fn build_octree(
         data: &[Option<ElementOf<O>>],
@@ -49,7 +53,7 @@ where
                 // This code generally won't be run but in the case we have 8 equal Either::Rights combine there data to construct an Octree that's one level higher
                 Self::new(
                     lower.into_data().into(),
-                    MortonCode::from_raw(morton_raw as u64).as_point().unwrap(),
+                    MortonCode::from_raw(morton_raw.as_()).into(),
                 )
             })
         } else {
@@ -63,16 +67,15 @@ where
                                     option_e
                                         .map(<O as HasData>::Data::leaf)
                                         .unwrap_or_else(<O as HasData>::Data::empty),
-                                    MortonCode::from_raw((morton_raw + segment_size * i) as u64)
-                                        .as_point()
-                                        .unwrap(),
+                                    MortonCode::from_raw((morton_raw + segment_size * i).as_())
+                                        .into(),
                                 )
                             })
                             .into_inner(),
                     )
                 }))
                 .expect("Failed to construct array from children iterator in build_octree");
-            let point = MortonCode::from_raw(morton_raw as u64).as_point().unwrap();
+            let point = MortonCode::from_raw(morton_raw.as_()).into();
             let octree = Self::new(LevelData::Node(childs), point);
             Either::Right(octree)
         }
@@ -128,7 +131,10 @@ impl<'a, Octree> IntoParallelIterator for &'a mut OctreeBuilder<Octree>
 where
     Octree: OctreeTypes,
     ElementOf<Octree>: Send,
-    FieldOf<Octree>: Send,
+    FieldOf<Octree>: Send + IntoBytes + MortonStorage,
+    LUTType:
+        AsPrimitive<FieldOf<Octree>> + AsPrimitive<<FieldOf<Octree> as MortonStorage>::Storage>,
+    usize: AsPrimitive<<FieldOf<Octree> as MortonStorage>::Storage>,
 {
     type Item = (Point3<FieldOf<Octree>>, &'a mut Option<ElementOf<Octree>>);
     type Iter = rayon::iter::Map<
@@ -142,7 +148,7 @@ where
         self.data
             .into_par_iter()
             .enumerate()
-            .map(|(indx, elem)| (MortonCode::from_raw(indx as u64).as_point().unwrap(), elem))
+            .map(|(indx, elem)| (MortonCode::from_raw(indx.as_()).into(), elem))
     }
 }
 
