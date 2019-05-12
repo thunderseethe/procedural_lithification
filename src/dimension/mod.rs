@@ -1,9 +1,9 @@
 use crate::{
     chunk::Chunk,
     field::*,
-    morton_code::MortonCode,
     terrain::{DefaultGenerateBlock, Terrain},
 };
+use morton_code::MortonCode;
 use amethyst::core::nalgebra::Point3;
 use parking_lot::{Mutex, MutexGuard};
 use std::{

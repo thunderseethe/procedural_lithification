@@ -1,0 +1,9 @@
+[package]
+name = "morton_code"
+version = "0.1.0"
+authors = ["thunderseethe <thunderseethe.dev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+num-traits="0.2"
+amethyst_core="0.5.0"

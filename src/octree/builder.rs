@@ -1,8 +1,8 @@
 use crate::iter_tools::all_equal;
-use crate::morton_code::{IntoBytes, LUTType, MortonCode, MortonStorage};
 use crate::octree::*;
 use either::Either;
 use num_traits::AsPrimitive;
+use morton_code::{IntoBytes, LUTType, MortonCode, MortonStorage};
 use rayon::iter::plumbing::*;
 use rayon::prelude::*;
 
@@ -75,7 +75,7 @@ where
                     )
                 }))
                 .expect("Failed to construct array from children iterator in build_octree");
-            let point = MortonCode::from_raw(morton_raw.as_()).as_point();
+            let point = MortonCode::from_raw(morton_raw.as_()).into();
             let octree = Self::new(LevelData::Node(childs), point);
             Either::Right(octree)
         }

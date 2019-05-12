@@ -1,5 +1,9 @@
-use amethyst::core::nalgebra::{Point3, Scalar};
-use num_traits::AsPrimitive;
+extern crate amethyst_core;
+extern crate num_traits;
+
+use amethyst_core::nalgebra::Scalar;
+use num_traits::{AsPrimitive, WrappingShl, WrappingShr, Zero};
+use std::ops::{BitAnd, BitOr};
 use std::{fmt, iter::Iterator};
 
 mod lut;
@@ -7,6 +11,7 @@ pub use lut::LUTType;
 use lut::*;
 
 pub mod convs;
+pub use convs::*;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug, Hash)]
 pub struct MortonCode<N: MortonStorage> {
@@ -76,14 +81,7 @@ where
         }
         (x, y, z)
     }
-
-    pub fn as_point(&self) -> Point3<N> {
-        let (x, y, z) = self.decode();
-        Point3::new(x, y, z)
-    }
 }
-use num_traits::{WrappingShl, WrappingShr, Zero};
-use std::ops::{BitAnd, BitOr};
 pub trait MortonStorage {
     /// Type that can contain an encoded MortonCode value from 3 elements of Self.
     /// For example this will be u32 for u8, since 3 * 8 = 24 bits and the smallest type that can hold that is u32.

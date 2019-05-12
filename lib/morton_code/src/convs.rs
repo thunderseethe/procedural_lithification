@@ -1,5 +1,5 @@
 use super::{IntoBytes, LUTType, MortonCode, MortonStorage};
-use amethyst::core::nalgebra::{Point3, Scalar};
+use amethyst_core::nalgebra::{Point3, Scalar};
 use num_traits::{AsPrimitive, Zero};
 use std::ops::BitOr;
 

@@ -1,6 +1,7 @@
 extern crate amethyst;
 extern crate cubes_lib;
 extern crate dirs;
+extern crate morton_code;
 extern crate parking_lot;
 extern crate tokio;
 
@@ -26,7 +27,6 @@ use cubes_lib::{
     collision::{CollisionDetection, CollisionId},
     dimension::{ChunkMortonCode, Dimension, DimensionConfig},
     field::*,
-    morton_code::MortonCode,
     systems::{
         collision::CheckPlayerCollisionSystem,
         dimension::{DimensionBundle, DimensionChunkEvent, DimensionChunkEvent::NewChunkAt},
@@ -34,6 +34,7 @@ use cubes_lib::{
     },
     volume::Sphere,
 };
+use morton_code::MortonCode;
 use parking_lot::Mutex;
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;

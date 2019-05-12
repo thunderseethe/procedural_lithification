@@ -86,7 +86,7 @@ impl DimensionStorage {
         SyncFile::open(chunk_path)
             .and_then(|file| {
                 let decoder = DeflateDecoder::new(file);
-                ChunkDeserialize::from(decoder, morton.as_point())
+                ChunkDeserialize::from(decoder, morton.into())
             })
             .map(move |chunk| {
                 // We're overwriting whatever was previously present at this index.
