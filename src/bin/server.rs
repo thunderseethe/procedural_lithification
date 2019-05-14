@@ -7,7 +7,7 @@ extern crate tokio;
 use amethyst::{
     core::{nalgebra::Point3, ArcThreadPool, Transform, TransformBundle},
     ecs::Join,
-    network::{FilterConnected, NetworkBundle},
+    network::NetworkBundle,
     prelude::*,
     shrev::EventChannel,
     utils::application_root_dir,
@@ -18,7 +18,7 @@ use cubes_lib::{
     field::FieldOf,
     octree::Diameter,
     systems::dimension::{DimensionBundle, DimensionChunkEvent},
-    systems::player::PlayerControlTag,
+    systems::player::PlayerEntityTag,
     volume::Sphere,
 };
 use morton_code::MortonCode;
@@ -35,10 +35,7 @@ fn main() -> amethyst::Result<()> {
     let resources = app_root.join("resources");
     let dimension_dir = resources.join("dimension");
     let game_data = GameDataBuilder::default()
-        .with_bundle(NetworkBundle::<()>::new(
-            CLIENT.parse().unwrap(),
-            vec![Box::new(FilterConnected::<()>::new())],
-        ))?
+        .with_bundle(NetworkBundle::<()>::new(CLIENT.parse().unwrap(), vec![]))?
         .with_bundle(TransformBundle::new())?
         .with_bundle(DimensionBundle::new())?;
     let mut game = Application::build(
@@ -90,6 +87,7 @@ impl ServerDimensionState {
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
     fn on_start(&mut self, data: StateData<GameData>) {
         let StateData { world, .. } = data;
+        world.register::<PlayerEntityTag>();
         let player_pos = Point3::new(
             Chunk::DIAMETER as f32,
             Chunk::DIAMETER as f32,
@@ -100,7 +98,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
         world
             .create_entity()
             .with(transform)
-            .with(PlayerControlTag::default())
+            .with(PlayerEntityTag::default())
             .build();
 
         let mut channel = EventChannel::new();
@@ -108,8 +106,8 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
             let mut runtime = world.write_resource::<Runtime>();
             self.init_dimension(&mut runtime, &mut channel);
         };
-        world.add_resource(dimension);
         world.add_resource(channel);
+        world.add_resource(dimension);
     }
 
     fn on_stop(&mut self, data: StateData<GameData>) {
@@ -127,7 +125,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
             world.write_resource::<EventChannel<DimensionChunkEvent>>(),
         ));
         for (_, transform) in (
-            &world.read_storage::<PlayerControlTag>(),
+            &world.read_storage::<PlayerEntityTag>(),
             &world.read_storage::<Transform>(),
         )
             .join()

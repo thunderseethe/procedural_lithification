@@ -16,6 +16,14 @@ use amethyst::{
 use serde::{Deserialize, Serialize};
 use std::{hash::Hash, marker::PhantomData};
 
+/// Tag denoting any player
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct PlayerEntityTag;
+impl Component for PlayerEntityTag {
+    type Storage = NullStorage<PlayerEntityTag>;
+}
+
+/// Tag denoting player this client is controlling
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct PlayerControlTag;
 impl Component for PlayerControlTag {
