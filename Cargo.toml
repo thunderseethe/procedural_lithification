@@ -45,6 +45,14 @@ version = "0.1.0"
 path = "./lib/morton_code"
 version = "0.1.0"
 
+[[bin]]
+name = "cubes"
+path = "./src/bin/cubes.rs"
+
+[[bin]]
+name = "server"
+path = "./src/bin/server.rs"
+
 [[bench]]
 name = "chunk"
 harness = false

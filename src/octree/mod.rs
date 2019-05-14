@@ -369,20 +369,6 @@ impl<O: OctreeTypes> OctreeLevel<O> {
             _ => false,
         }
     }
-
-    //pub fn map<EFn, LFn, NFn, Output>(&self, empty_fn: EFn, leaf_fn: LFn, node_fn: NFn) -> Output
-    //where
-    //    EFn: FnOnce() -> Output,
-    //    LFn: FnOnce(&<Self as ElementType>::Element) -> Output,
-    //    NFn: FnOnce(&[Ref<O>; 8]) -> Output,
-    //{
-    //    use LevelData::*;
-    //    match &self.data {
-    //        Empty => empty_fn(),
-    //        Leaf(elem) => leaf_fn(&elem),
-    //        Node(ref nodes) => node_fn(nodes),
-    //    }
-    //}
 }
 impl<E: Clone, N: Number> OctreeBase<E, N> {
     fn with_data(&self, data: DataOf<Self>) -> Self {
