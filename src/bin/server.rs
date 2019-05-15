@@ -7,7 +7,7 @@ extern crate tokio;
 use amethyst::{
     core::{nalgebra::Point3, ArcThreadPool, Transform, TransformBundle},
     ecs::Join,
-    network::NetworkBundle,
+    network::{NetConnection, NetworkBundle},
     prelude::*,
     shrev::EventChannel,
     utils::application_root_dir,
@@ -17,6 +17,7 @@ use cubes_lib::{
     dimension::{ChunkMortonCode, Dimension, DimensionConfig},
     field::FieldOf,
     octree::Diameter,
+    protocol::ServerProtocol,
     systems::dimension::{DimensionBundle, DimensionChunkEvent},
     systems::player::PlayerEntityTag,
     volume::Sphere,
@@ -35,7 +36,10 @@ fn main() -> amethyst::Result<()> {
     let resources = app_root.join("resources");
     let dimension_dir = resources.join("dimension");
     let game_data = GameDataBuilder::default()
-        .with_bundle(NetworkBundle::<()>::new(CLIENT.parse().unwrap(), vec![]))?
+        .with_bundle(NetworkBundle::<ServerProtocol>::new(
+            CLIENT.parse().unwrap(),
+            vec![],
+        ))?
         .with_bundle(TransformBundle::new())?
         .with_bundle(DimensionBundle::new())?;
     let mut game = Application::build(
@@ -83,11 +87,17 @@ impl ServerDimensionState {
         dimension.store(self.dimension_config.directory.as_path(), runtime);
         dimension
     }
+
+    fn register_components(&mut self, world: &mut World) {
+        world.register::<PlayerEntityTag>();
+        world.register::<NetConnection<ServerProtocol>>();
+    }
 }
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
     fn on_start(&mut self, data: StateData<GameData>) {
-        let StateData { world, .. } = data;
-        world.register::<PlayerEntityTag>();
+        let StateData { mut world, .. } = data;
+        self.register_components(&mut world);
+
         let player_pos = Point3::new(
             Chunk::DIAMETER as f32,
             Chunk::DIAMETER as f32,
@@ -108,6 +118,14 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
         };
         world.add_resource(channel);
         world.add_resource(dimension);
+
+        // NetConnection to talk to Client
+        world
+            .create_entity()
+            .with(NetConnection::<ServerProtocol>::new(
+                CLIENT.parse().unwrap(),
+            ))
+            .build();
     }
 
     fn on_stop(&mut self, data: StateData<GameData>) {

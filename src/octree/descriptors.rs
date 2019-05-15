@@ -219,9 +219,20 @@ impl<E, N: Scalar> HasPosition for OctreeBase<E, N> {
     }
 }
 
+/// Convenience trait to allow moving down the tree from a top level OctreeLevel
+pub trait HasChild {
+    type Child;
+}
+impl<O> HasChild for OctreeLevel<O> 
+where
+    O: OctreeTypes,
+{
+    type Child = O;
+}
+
 /// We can move a data type up the tree arbitratily as long as it's not a Node variant.
 /// This is helpful when building an Octree and when compressing an Octree.
-/// During these operations we want to unify elements of are sub octree that are all equal into one element of our parent octree.
+/// During these operations we want to unify elements of our sub octree that are all equal into one element of our parent octree.
 /// The easiest way to accomplish this is with a recast as done here
 impl<O> From<LevelData<O>> for LevelData<OctreeLevel<O>>
 where

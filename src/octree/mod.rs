@@ -30,6 +30,7 @@ use octant::OctantId;
 pub type Ref<T> = Arc<T>;
 
 pub type DataOf<T> = <T as HasData>::Data;
+pub type ChildOf<T> = <T as HasChild>::Child;
 pub type PositionOf<T> = <T as HasPosition>::Position;
 pub type ElementOf<T> = <T as ElementType>::Element;
 

@@ -26,6 +26,7 @@ pub mod collision;
 pub mod dimension;
 pub mod field;
 pub mod octree;
+pub mod protocol;
 pub mod systems;
 pub mod terrain;
 pub mod volume;

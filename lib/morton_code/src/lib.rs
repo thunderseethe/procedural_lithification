@@ -1,5 +1,7 @@
 extern crate amethyst_core;
 extern crate num_traits;
+#[macro_use]
+extern crate serde_derive;
 
 use amethyst_core::nalgebra::Scalar;
 use num_traits::{AsPrimitive, WrappingShl, WrappingShr, Zero};
@@ -13,7 +15,7 @@ use lut::*;
 pub mod convs;
 pub use convs::*;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug, Hash, Serialize, Deserialize)]
 pub struct MortonCode<N: MortonStorage> {
     data: N::Storage,
     marker: std::marker::PhantomData<N>,

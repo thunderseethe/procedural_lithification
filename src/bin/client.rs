@@ -11,7 +11,7 @@ use amethyst::{
         Transform, TransformBundle,
     },
     input::InputBundle,
-    network::NetworkBundle,
+    network::{NetConnection, NetworkBundle},
     prelude::*,
     renderer::{
         AmbientColor, Camera, DirectionalLight, DisplayConfig, DrawShaded, DrawSkybox, Event,
@@ -23,6 +23,7 @@ use amethyst::{
 };
 use cubes_lib::{
     collision::{CollisionDetection, CollisionId},
+    protocol::ClientProtocol,
     systems::{
         collision::CheckPlayerCollisionSystem,
         player::{PlayerControlBundle, PlayerControlTag, PlayerEntityTag},
@@ -58,7 +59,10 @@ fn main() -> amethyst::Result<()> {
             .with_speed(16.0)
             .with_sensitivity(0.1, 0.1),
         )?
-        .with_bundle(NetworkBundle::<()>::new(SERVER.parse().unwrap(), vec![]))?
+        .with_bundle(NetworkBundle::<ClientProtocol>::new(
+            SERVER.parse().unwrap(),
+            vec![],
+        ))?
         .with_bundle(TransformBundle::new().with_dep(&["player_movement"]))?
         .with_bundle(UiBundle::<String, String>::new())?
         .with_bundle(
@@ -79,14 +83,19 @@ impl ClientDimensionState {
     pub fn new() -> Self {
         ClientDimensionState
     }
+
+    fn register_components(&self, world: &mut World) {
+        world.register::<PlayerEntityTag>();
+        world.register::<NetConnection<ClientProtocol>>();
+    }
 }
 
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ClientDimensionState {
     fn on_start(&mut self, data: StateData<GameData>) {
-        let StateData { world, .. } = data;
-        world.register::<PlayerEntityTag>();
-        world.add_resource(AmbientColor(Rgba::from([0.5; 3])));
+        let StateData { mut world, .. } = data;
+        self.register_components(&mut world);
 
+        world.add_resource(AmbientColor(Rgba::from([0.5; 3])));
 
         println!("Creating lights...");
         let light: Light = DirectionalLight {
@@ -117,6 +126,13 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ClientDimensionState {
             .build();
 
         world.add_resource(collision);
+
+        world
+            .create_entity()
+            .with(NetConnection::<ClientProtocol>::new(
+                SERVER.parse().unwrap(),
+            ))
+            .build();
 
         world.exec(|mut creator: UiCreator<'_>| {
             creator.create("ui/position.ron", ());
