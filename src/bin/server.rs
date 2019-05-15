@@ -18,7 +18,7 @@ use cubes_lib::{
     field::FieldOf,
     octree::Diameter,
     protocol::ServerProtocol,
-    systems::dimension::{DimensionBundle, DimensionChunkEvent},
+    systems::dimension::DimensionChunkEvent,
     systems::player::PlayerEntityTag,
     volume::Sphere,
 };
@@ -40,8 +40,7 @@ fn main() -> amethyst::Result<()> {
             CLIENT.parse().unwrap(),
             vec![],
         ))?
-        .with_bundle(TransformBundle::new())?
-        .with_bundle(DimensionBundle::new())?;
+        .with_bundle(TransformBundle::new())?;
     let mut game = Application::build(
         &resources,
         ServerDimensionState::new(DimensionConfig::new(dimension_dir, 2)),
@@ -96,6 +95,14 @@ impl ServerDimensionState {
 impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
     fn on_start(&mut self, data: StateData<GameData>) {
         let StateData { mut world, .. } = data;
+        let mut channel = EventChannel::new();
+        let dimension = {
+            let mut runtime = world.write_resource::<Runtime>();
+            self.init_dimension(&mut runtime, &mut channel)
+        };
+        world.add_resource(dimension);
+        world.add_resource(channel);
+
         self.register_components(&mut world);
 
         let player_pos = Point3::new(
@@ -111,13 +118,6 @@ impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for ServerDimensionState {
             .with(PlayerEntityTag::default())
             .build();
 
-        let mut channel = EventChannel::new();
-        let dimension = {
-            let mut runtime = world.write_resource::<Runtime>();
-            self.init_dimension(&mut runtime, &mut channel);
-        };
-        world.add_resource(channel);
-        world.add_resource(dimension);
 
         // NetConnection to talk to Client
         world
