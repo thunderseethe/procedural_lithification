@@ -1,0 +1,25 @@
+[package]
+name = "wasm_ecs"
+version = "0.1.0"
+authors = ["thunderseethe"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "client"
+
+[[bin]]
+name = "server"
+
+[workspace]
+members = []
+#members = ["bevy","bevy/crates/*", "bevy/examples/ios", "bevy/tools/ci"]
+exclude = ["mods/", "bevy/"]
+
+[dependencies]
+bevy = "0.4"
+anyhow = "1.0.37"
+crossbeam = "0.8"
+wasmtime = "0.23.0"
+wasmtime-wasi = "0.22.0"

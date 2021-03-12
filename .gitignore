@@ -1,0 +1,10 @@
+target/
+**/target
+Cargo.lock
+**/Cargo.lock
+.stignore
+.stfolder
+.stversions
+
+**/node_modules
+**/build
