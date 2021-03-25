@@ -19,8 +19,10 @@ exclude = ["mods/", "bevy/"]
 [dependencies]
 anyhow = "1.0.37"
 crossbeam = "0.8"
-wasmtime = "0.23.0"
-wasmtime-wasi = "0.22.0"
+wasmtime = "0.25.0"
+wasmtime-wasi = "0.25.0"
+wasi-cap-std-sync = "0.25.0"
+uuid = { version = "0.8", features = ["v4"] }
 
 [dependencies.bevy]
 path = "./bevy"

@@ -15,7 +15,6 @@ pub fn pressed(input: &Input<KeyCode>, key: KeyCode) -> bool {
     input.pressed(key)
 }
 
-
 #[no_mangle]
 pub fn keycode_a() -> KeyCode {
     KeyCode::A
