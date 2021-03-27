@@ -37,10 +37,6 @@ export function just_pressed(inp: externref): i32 {
 //	enabled: bool,
 //}
 
-//export interface FlyCamera {
-//  x: i32
-//}
-
 @unmanaged 
 class FlyCamera {
   constructor(
@@ -50,7 +46,8 @@ class FlyCamera {
   ) {}
 }
 
-function raw_store_tuple<T>(name: String, val: T): usize {
+function alloc_tuple<T>(name: String, val: T): usize {
+  //let name_utf8 = String.UTF8.encode(name, false);
   let name_ptr: usize = changetype<usize>(name);
   let val_ptr: usize = changetype<usize>(val);
   let tuple_ptr = memory.data(sizeof<usize>() * 2);
@@ -61,7 +58,7 @@ function raw_store_tuple<T>(name: String, val: T): usize {
 
 export function initialize(): usize {
   let fly_cam = new FlyCamera(1, 2, 4);
-  return raw_store_tuple("mods::as_sys::FlyCamera", fly_cam);
+  return alloc_tuple("mods::as_sys::FlyCamera", fly_cam);
 }
   //let velocity = new Float32Array(3);
   //velocity[0] = 0;

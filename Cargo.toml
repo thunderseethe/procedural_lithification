@@ -12,9 +12,15 @@ name = "client"
 [[bin]]
 name = "server"
 
+[[bin]]
+name = "main"
+
 [workspace]
 members = ["interface"]
 exclude = ["mods/", "bevy/"]
+
+[build-dependencies]
+which = "4.0.2"
 
 [dependencies]
 anyhow = "1.0.37"
