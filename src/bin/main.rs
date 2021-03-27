@@ -337,7 +337,7 @@ impl System for WasmSystem {
         let memory = instance.get_memory("memory").expect("Expected export \"memory\"");
         let ffi_obj: FfiObj<AsObj> = FfiObj::from_wasm_mem(&memory, ptr as usize);
         
-         
+        
         ()
     }
 
