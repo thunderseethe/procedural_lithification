@@ -1,6 +1,7 @@
 // The entry file of your WebAssembly module.
 import "wasi";
-import { just_pressed as input_just_pressed } from './interface';
+import { just_pressed as input_just_pressed, Vec3, Quat } from './interface';
+
 
 export function just_pressed(inp: externref): i32 {
   return input_just_pressed(inp, 34);
@@ -52,7 +53,7 @@ function alloc_tuple<T>(name: String, val: T): usize {
   let val_ptr: usize = changetype<usize>(val);
   let tuple_ptr = memory.data(sizeof<usize>() * 2);
   store<usize>(tuple_ptr, name_ptr);
-  store<usize>(tuple_ptr + sizeof<usize>(), val_ptr);
+  store<usize>(tuple_ptr, val_ptr, sizeof<usize>());
   return tuple_ptr;
 }
 
@@ -81,3 +82,7 @@ export function initialize(): usize {
   //  enabled: true,
   //};
 //}
+
+export function forward_vector(rot: Quat): Vec3 {
+  return rot.mul_vec3(Vec3.unit_z()).normalize();
+}

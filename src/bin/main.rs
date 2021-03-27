@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, usize};
 use std::{
     any::{type_name, TypeId},
     borrow::Cow,
@@ -8,7 +8,6 @@ use std::{
 };
 
 use bevy::{input::Input, scene::serde};
-use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
 use bevy::reflect::*;
 use wasi_cap_std_sync::WasiCtxBuilder;
@@ -89,6 +88,7 @@ fn main() -> anyhow::Result<()> {
         Module::from_file(engine.as_ref(), "./mods/as_sys/build/optimized.wasm")
     })?;
 
+    use glam::f32::{Vec3, Quat};
     let instance_res: anyhow::Result<Instance> = LINKER.with(|linker| {
         linker.borrow_mut().func(
             "interface",
@@ -102,33 +102,94 @@ fn main() -> anyhow::Result<()> {
                 inp.just_pressed(arg) as i32
             },
         )?;
+
+        linker.borrow_mut().func("interface", "_unit_z", |ctx: Caller<'_>, ptr: i32| -> () {
+            let unit_z = Vec3::Z;
+
+            let mem = ctx.get_export("memory")
+                .and_then(|ext| ext.into_memory())
+                .expect("expected export \"memory\"");
+            mem.write(ptr as usize, bytemuck::bytes_of(&unit_z)).expect("enough bytes were allocated for Vec3")
+        })?;
+
+        linker.borrow_mut().func("interface", "_normalize", |ctx: Caller<'_>, in_ptr: i32, ptr: i32| -> () {
+            let mem = ctx.get_export("memory")
+                .and_then(|ext| ext.into_memory())
+                .expect("expected export \"memory\"");
+
+            let in_ptr = in_ptr as usize;
+            // SAFE: this function will only be called while wasm mem is live so we can take reference to it without worry
+            let vec3: &Vec3 = unsafe { 
+                let mem_s = mem.data_unchecked(); 
+                bytemuck::from_bytes(&mem_s[in_ptr..(in_ptr+size_of::<Vec3>())])
+            };
+            let out = vec3.normalize();
+            mem.write(ptr as usize, bytemuck::bytes_of(&out)).expect("normalize(): expected enough mem to write Vec3 at ptr");
+        })?;
+
+        linker.borrow_mut().func("interface", "_mul_vec3", |ctx: Caller<'_>, quat_ptr: i32, vec_ptr: i32, res:i32| -> () {
+            let mem = ctx.get_export("memory")
+                .and_then(|ext| ext.into_memory())
+                .expect("expected export \"memory\"");
+
+            let quat_ptr = quat_ptr as usize;
+            let quat: &Quat = unsafe {
+                let mem_s = mem.data_unchecked(); 
+                bytemuck::from_bytes(&mem_s[quat_ptr..(quat_ptr+size_of::<Quat>())])
+            };
+
+            // SAFE: this function will only be called while wasm mem is live so we can take reference to it without worry
+            let vec_ptr = vec_ptr as usize;
+            let vec3: &Vec3 = unsafe { 
+                let mem_s = mem.data_unchecked(); 
+                bytemuck::from_bytes(&mem_s[vec_ptr..(vec_ptr+size_of::<Vec3>())])
+            };
+
+            let out = quat.mul_vec3(*vec3);
+
+            mem.write(res as usize, bytemuck::bytes_of(&out)).expect("mul_vec3(): expected enough mem to write Vec3 at ptr");
+        })?;
+
         let instance = linker.borrow().instantiate(&module)?;
         Ok(instance)
     });
 
     let instance = instance_res?;
 
-    let setup = instance.get_func("initialize").expect("whoops");
+    //let setup = instance.get_func("initialize").expect("whoops");
 
-    let obj_ptr = setup.typed::<(), i32>()?.call(())? as usize;
+    //let obj_ptr = setup.typed::<(), i32>()?.call(())? as usize;
 
     let mem = instance
         .get_memory("memory")
         .expect("expected export \"memory\"");
 
-    let ffi = unsafe {
-        let mem_s = mem.data_unchecked();
-        let name_ptr = read_u32(mem_s, obj_ptr);
-        let val_ptr = read_u32(mem_s, obj_ptr + USIZE_LEN);
-        let name: String = read_utf16_string(&mem, name_ptr as usize);
-        let as_obj = AsObj::from_wasm_mem(&mem, val_ptr as usize);
+    let quat = Quat::IDENTITY;
+    mem.write(0, bytemuck::bytes_of(&quat))?;
 
-        FfiObj {
-            type_name: TypeName(name),
-            type_id: generate_component_id(),
-            obj: as_obj
-        }
+    let forward_vector = instance.get_func("forward_vector").expect("expected export \"forward_vector\"");
+    let obj_ptr = forward_vector.typed::<i32, i32>()?.call(0)? as usize;
+   
+    let v_ptr = unsafe {
+         read_u32(mem.data_unchecked(), obj_ptr) as usize 
     };
+    let mut buf: [u8; size_of::<Vec3>()] = [0; size_of::<Vec3>()];
+    mem.read(v_ptr, &mut buf[..])?;
+    println!("{:?}", buf);
+    println!("{:?}", bytemuck::from_bytes::<Vec3>(&buf));
+    //let ffi = unsafe {
+    //    let mem_s = mem.data_unchecked();
+    //    let name_ptr = read_u32(mem_s, obj_ptr);
+    //    let val_ptr = read_u32(mem_s, obj_ptr + USIZE_LEN);
+    //    let name: String = read_utf16_string(&mem, name_ptr as usize);
+    //    let as_obj = AsObj::from_wasm_mem(&mem, val_ptr as usize);
+
+    //    FfiObj {
+    //        type_name: TypeName(name),
+    //        type_id: generate_component_id(),
+    //        obj: as_obj
+    //    }
+    //};
 
     //let reflect_component = ReflectComponent::from_type();
 
@@ -196,8 +257,10 @@ impl FromWasmMem for AsObj {
     }
 }
 
+/*
 use std::any::Any;
 use std::hash::{Hash, Hasher};
+
 
 #[derive(Clone, Debug, PartialEq)]
 struct FfiObj<T> {
@@ -221,7 +284,7 @@ impl<T: FromWasmMem> FfiObj<T> {
     }
 }
 
-unsafe impl<T> Reflect for FfiObj<T> 
+impl<T> Reflect for FfiObj<T> 
 where
     T: Clone + Hash + PartialEq + Send + Sync + 'static
 {
@@ -285,7 +348,7 @@ where
     }
 }
 
-use bevy::ecs::system::{System, SystemId};
+use bevy::ecs::{System, SystemId};
 
 fn generate_component_id() -> ComponentId {
     let uid = uuid::Uuid::new_v4();
@@ -309,65 +372,54 @@ impl WasmSystem {
 }
 
 
-impl System for WasmSystem {
-    type In = ();
-
-    type Out = ();
-
-    fn name(&self) -> std::borrow::Cow<'static, str> {
-        self.module
-            .name()
-            .map(|name| name.to_string())
-            .map(Cow::Owned)
-            .unwrap_or_else(|| Cow::Owned("unnamed_wasm_system".to_string()))
-    }
-
-    fn id(&self) -> SystemId {
-        self.id
-    }
-
-    fn initialize(&mut self, world: &mut World) {
-        let instance = LINKER.with(|linker| {
-            linker.borrow().instantiate(&self.module).expect("Failed to instantiate module")
-        });
-        let initialize = instance.get_func("initialize").expect("Module must export \"initialize\"");
-        let ptr = initialize.typed::<(), i32>()
-            .expect("type to be () -> i32")
-            .call(()).expect("Don't trap please");
-        let memory = instance.get_memory("memory").expect("Expected export \"memory\"");
-        let ffi_obj: FfiObj<AsObj> = FfiObj::from_wasm_mem(&memory, ptr as usize);
-        
-        
-        ()
-    }
-
-    unsafe fn run_unsafe(&mut self, _input: Self::In, _world: &World) -> Self::Out {
-        todo!()
-    }
-
-    fn new_archetype(&mut self, archetype: &bevy::ecs::archetype::Archetype) {
-        todo!()
-    }
-
-    fn component_access(&self) -> &bevy::ecs::query::Access<bevy::ecs::component::ComponentId> {
-        todo!()
-    }
-
-    fn archetype_component_access(
-        &self,
-    ) -> &bevy::ecs::query::Access<bevy::ecs::archetype::ArchetypeComponentId> {
-        todo!()
-    }
-
-    fn apply_buffers(&mut self, world: &mut World) {
-        todo!()
-    }
-
-    fn check_change_tick(&mut self, change_tick: u32) {
-        todo!()
-    }
-
-    fn is_send(&self) -> bool {
-        todo!()
-    }
-}
+//impl System for WasmSystem {
+//    type In = ();
+//
+//    type Out = ();
+//
+//    fn name(&self) -> std::borrow::Cow<'static, str> {
+//        self.module
+//            .name()
+//            .map(|name| name.to_string())
+//            .map(Cow::Owned)
+//            .unwrap_or_else(|| Cow::Owned("unnamed_wasm_system".to_string()))
+//    }
+//
+//    fn id(&self) -> SystemId {
+//        self.id
+//    }
+//
+//    fn initialize(&mut self, world: &mut World) {
+//        let instance = LINKER.with(|linker| {
+//            linker.borrow().instantiate(&self.module).expect("Failed to instantiate module")
+//        });
+//        let initialize = instance.get_func("initialize").expect("Module must export \"initialize\"");
+//        let ptr = initialize.typed::<(), i32>()
+//            .expect("type to be () -> i32")
+//            .call(()).expect("Don't trap please");
+//        let memory = instance.get_memory("memory").expect("Expected export \"memory\"");
+//        let ffi_obj: FfiObj<AsObj> = FfiObj::from_wasm_mem(&memory, ptr as usize);
+//        
+//        
+//        ()
+//    }
+//
+//    unsafe fn run_unsafe(&mut self, _input: Self::In, _world: &World) -> Self::Out {
+//        todo!()
+//    }
+//
+//    fn component_access(&self) -> &bevy::ecs::query::Access<bevy::ecs::component::ComponentId> {
+//        todo!()
+//    }
+//
+//    fn archetype_component_access(
+//        &self,
+//    ) -> &bevy::ecs::query::Access<bevy::ecs::archetype::ArchetypeComponentId> {
+//        todo!()
+//    }
+//
+//    fn apply_buffers(&mut self, world: &mut World) {
+//        todo!()
+//    }
+//}
+*/

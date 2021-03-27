@@ -8,6 +8,9 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib"]
 
+[dependencies]
+glam = "0.13"
+
 [dependencies.bevy_input]
 path = "../bevy/crates/bevy_input"
 version = "0.4"

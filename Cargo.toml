@@ -1,5 +1,5 @@
 [package]
-name = "wasm_ecs"
+name = "procedural_lithification"
 version = "0.1.0"
 authors = ["thunderseethe"]
 edition = "2018"
@@ -24,7 +24,9 @@ which = "4.0.2"
 
 [dependencies]
 anyhow = "1.0.37"
+bytemuck = "1.5"
 crossbeam = "0.8"
+glam = {version = "0.13", features = ["bytemuck"]}
 wasmtime = "0.25.0"
 wasmtime-wasi = "0.25.0"
 wasi-cap-std-sync = "0.25.0"
