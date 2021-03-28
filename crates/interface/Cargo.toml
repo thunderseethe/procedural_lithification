@@ -1,0 +1,14 @@
+[package]
+name = "interface"
+version = "0.1.0"
+authors = ["thunderseethe <thunderseethe.dev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+glam = "0.13"
+wasmtime-wiggle = "0.25"
+wiggle = "0.25"
+
+wasmtime = "0.25"
+witx = "0.9"
+anyhow = "1.0"

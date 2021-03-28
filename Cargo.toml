@@ -16,14 +16,14 @@ name = "server"
 name = "main"
 
 [workspace]
-members = ["interface"]
+members = ["crates/*"]
 exclude = ["mods/", "bevy/"]
 
 [build-dependencies]
 which = "4.0.2"
 
 [dependencies]
-anyhow = "1.0.37"
+anyhow = "1.0"
 bytemuck = "1.5"
 crossbeam = "0.8"
 glam = {version = "0.13", features = ["bytemuck"]}
@@ -36,3 +36,7 @@ uuid = { version = "0.8", features = ["v4"] }
 [dependencies.bevy]
 path = "./bevy"
 version = "0.4"
+
+[dependencies.interface]
+path = "./crates/interface"
+version = "0.1"

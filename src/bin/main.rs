@@ -11,6 +11,8 @@ use wasmtime::*;
 use wasmtime_wasi::snapshots::preview_1::Wasi;
 use std::mem::size_of;
 
+use interface::GlamCtx;
+
 const U32_LEN: usize = std::mem::size_of::<u32>();
 
 thread_local! {
