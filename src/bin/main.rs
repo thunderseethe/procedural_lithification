@@ -1,62 +1,17 @@
 use std::{cell::RefCell, usize};
 use std::{
     any::{type_name, TypeId},
-    borrow::Cow,
-    collections::HashMap,
-    convert::TryInto,
     sync::Arc,
+    rc::Rc,
 };
 
-use bevy::{input::Input, scene::serde};
-use bevy::prelude::*;
-use bevy::reflect::*;
+use bevy::input::Input;
 use wasi_cap_std_sync::WasiCtxBuilder;
 use wasmtime::*;
-use wasmtime_wasi::Wasi;
+use wasmtime_wasi::snapshots::preview_1::Wasi;
+use std::mem::size_of;
 
 const U32_LEN: usize = std::mem::size_of::<u32>();
-
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-struct TypeName(String);
-impl TypeName {
-    pub fn of<T>() -> Self {
-        Self(type_name::<T>().to_string())
-    }
-
-    // For types from wasm that do not have an innate type name
-    pub(crate) fn dynamic_name<S: ToString>(string: S) -> Self {
-        Self(string.to_string())
-    }
-}
-impl AsRef<str> for TypeName {
-    fn as_ref(&self) -> &str {
-        &self.0 
-    }
-}
-
-struct TypeRegistry {
-    registry: HashMap<TypeName, TypeId>
-}
-impl TypeRegistry {
-    fn register<T: 'static>(&mut self) {
-        let name = TypeName::of::<T>();
-
-        self.registry.entry(name).or_insert(TypeId::of::<T>());
-    }
-
-    fn dynamic_register(&mut self, name: TypeName, id: TypeId) {
-        self.registry.entry(name).or_insert(id);
-    }
-
-    fn get(&self, name: &TypeName) -> Option<&TypeId> {
-        self.registry.get(name)
-    }
-
-    fn as_map(&mut self) -> &mut HashMap<TypeName, TypeId> {
-        &mut self.registry
-    }
-}
-
 
 thread_local! {
     pub static CONFIG: Config = {
@@ -73,23 +28,46 @@ thread_local! {
     });
     pub static LINKER: RefCell<Linker> = ENGINE.with(|engine| {
         let store = Store::new(engine.as_ref());
-        let wasi = Wasi::new(&store, WasiCtxBuilder::new().inherit_stdio().build().expect("couldn't construct WasiCtx"));
+        let ctx = Rc::new(RefCell::new(WasiCtxBuilder::new()
+            .inherit_stdio()
+            .build().expect("couldn't construct WasiCtx")));
+        let wasi = Wasi::new(&store, ctx);
         let mut linker = Linker::new(&store);
         wasi.add_to_linker(&mut linker).expect("Failed to add wasi to linker");
         RefCell::new(linker)
     });
 }
 
-use std::mem::size_of;
-const USIZE_LEN: usize = size_of::<u32>();
 
 fn main() -> anyhow::Result<()> {
     let module = ENGINE.with(|engine| {
         Module::from_file(engine.as_ref(), "./mods/as_sys/build/optimized.wasm")
     })?;
 
+    println!("Vec3.size({})", size_of::<Vec3>());
+
     use glam::f32::{Vec3, Quat};
     let instance_res: anyhow::Result<Instance> = LINKER.with(|linker| {
+        let vec3_size = Global::new(linker.borrow().store(),
+            GlobalType::new(ValType::I32, Mutability::Const),
+            Val::I32(size_of::<Vec3>() as i32))?;
+
+        linker.borrow_mut().func("console", "log", 
+            |ctx: Caller<'_>, ptr: i32| -> () {
+                let mem = ctx.get_export("memory")
+                    .and_then(|ext| ext.into_memory())
+                    .expect("expected export \"memory\"");
+
+                let s = read_utf16_string(&mem, ptr as usize).unwrap();
+                println!("{}", s);
+            })?;
+
+        linker.borrow_mut().define(
+            "interface",
+            "VEC3_SIZE",
+            vec3_size)?;
+
+
         linker.borrow_mut().func(
             "interface",
             "just_pressed",
@@ -112,19 +90,19 @@ fn main() -> anyhow::Result<()> {
             mem.write(ptr as usize, bytemuck::bytes_of(&unit_z)).expect("enough bytes were allocated for Vec3")
         })?;
 
-        linker.borrow_mut().func("interface", "_normalize", |ctx: Caller<'_>, in_ptr: i32, ptr: i32| -> () {
+        linker.borrow_mut().func("interface", "_normalize", |ctx: Caller<'_>, in_ptr: i32| -> () {
             let mem = ctx.get_export("memory")
                 .and_then(|ext| ext.into_memory())
                 .expect("expected export \"memory\"");
 
             let in_ptr = in_ptr as usize;
             // SAFE: this function will only be called while wasm mem is live so we can take reference to it without worry
-            let vec3: &Vec3 = unsafe { 
-                let mem_s = mem.data_unchecked(); 
+            let vec3: &Vec3 = unsafe {
+                let mem_s = mem.data_unchecked();
                 bytemuck::from_bytes(&mem_s[in_ptr..(in_ptr+size_of::<Vec3>())])
             };
             let out = vec3.normalize();
-            mem.write(ptr as usize, bytemuck::bytes_of(&out)).expect("normalize(): expected enough mem to write Vec3 at ptr");
+            mem.write(in_ptr as usize, bytemuck::bytes_of(&out)).expect("normalize(): expected enough mem to write Vec3 at ptr");
         })?;
 
         linker.borrow_mut().func("interface", "_mul_vec3", |ctx: Caller<'_>, quat_ptr: i32, vec_ptr: i32, res:i32| -> () {
@@ -133,19 +111,21 @@ fn main() -> anyhow::Result<()> {
                 .expect("expected export \"memory\"");
 
             let quat_ptr = quat_ptr as usize;
-            let quat: &Quat = unsafe {
-                let mem_s = mem.data_unchecked(); 
-                bytemuck::from_bytes(&mem_s[quat_ptr..(quat_ptr+size_of::<Quat>())])
+            let quat: Quat = unsafe {
+                let mem_s = mem.data_unchecked();
+                let mut buf: [u8; size_of::<Quat>()] = [0; size_of::<Quat>()];
+                buf.copy_from_slice(&mem_s[quat_ptr..(quat_ptr+size_of::<glam::Quat>())]);
+                std::mem::transmute(buf)
             };
 
             // SAFE: this function will only be called while wasm mem is live so we can take reference to it without worry
             let vec_ptr = vec_ptr as usize;
-            let vec3: &Vec3 = unsafe { 
+            let vec3: &Vec3 = unsafe {
                 let mem_s = mem.data_unchecked(); 
                 bytemuck::from_bytes(&mem_s[vec_ptr..(vec_ptr+size_of::<Vec3>())])
             };
 
-            let out = quat.mul_vec3(*vec3);
+            let out = quat.mul_vec3(vec3.clone());
 
             mem.write(res as usize, bytemuck::bytes_of(&out)).expect("mul_vec3(): expected enough mem to write Vec3 at ptr");
         })?;
@@ -156,23 +136,24 @@ fn main() -> anyhow::Result<()> {
 
     let instance = instance_res?;
 
-    //let setup = instance.get_func("initialize").expect("whoops");
-
-    //let obj_ptr = setup.typed::<(), i32>()?.call(())? as usize;
-
     let mem = instance
         .get_memory("memory")
         .expect("expected export \"memory\"");
 
-    let quat = Quat::IDENTITY;
-    mem.write(0, bytemuck::bytes_of(&quat))?;
+    let alloc: TypedFunc<i32, i32> = instance.get_typed_func("alloc")?;
+    let ptr = alloc.call(size_of::<Quat>() as i32)?;
+
+    //let quat = Quat::IDENTITY;
+    let quat = Quat::from_axis_angle(Vec3::new(1.0, 0.0, 1.0), 1.0);
+    mem.write(ptr as usize, bytemuck::bytes_of(&quat))?;
+
+    let q_ptr = alloc.call(size_of::<i32>() as i32)?;
+    mem.write(q_ptr as usize, bytemuck::bytes_of(&ptr))?;
 
     let forward_vector = instance.get_func("forward_vector").expect("expected export \"forward_vector\"");
-    let obj_ptr = forward_vector.typed::<i32, i32>()?.call(0)? as usize;
-   
-    let v_ptr = unsafe {
-         read_u32(mem.data_unchecked(), obj_ptr) as usize 
-    };
+    let obj_ptr = forward_vector.typed::<i32, i32>()?.call(q_ptr)? as usize;   
+    let v_ptr = read_u32(&mem, obj_ptr)? as usize;
+
     let mut buf: [u8; size_of::<Vec3>()] = [0; size_of::<Vec3>()];
     mem.read(v_ptr, &mut buf[..])?;
     println!("{:?}", buf);
@@ -207,31 +188,35 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_string(mem: &Memory, ptr: usize) -> String {
-    unsafe { 
-        let str_size = read_u32(mem.data_unchecked(), ptr-4) as usize;
-        let str_slice = &mem.data_unchecked()[ptr..(ptr+str_size)];
-        String::from_utf8_unchecked(str_slice.to_owned())
-    }
+fn read_string(mem: &Memory, ptr: usize) -> Result<String, wasmtime::MemoryAccessError> {
+    let str_size = read_u32(mem, ptr-4)? as usize;
+    let mut buf = Vec::with_capacity(str_size);
+    buf.reserve_exact(str_size);
+    // String is utf8 encoded on wasm side so we can unwrap here
+    mem.read(ptr, &mut buf[..]).map(|_|
+        unsafe { String::from_utf8_unchecked(buf) })
 }
 
-fn read_utf16_string(mem: &Memory, ptr: usize) -> String {
+fn read_utf16_string(mem: &Memory, ptr: usize) -> Result<String, wasmtime::MemoryAccessError> {
+    let str_size = read_u32(&mem, ptr-4)? as usize;
     unsafe {
-        let str_size = read_u32(mem.data_unchecked(), ptr-4) as usize;
         let str_ptr = mem.data_ptr() as *const u16;
-        String::from_utf16(std::slice::from_raw_parts(str_ptr, str_size / 2))
-            .expect("Expected javascript string to be utf16 encoded")
+        Ok(String::from_utf16(std::slice::from_raw_parts(str_ptr, str_size / 2))
+            .expect("Expected javascript string to be utf16 encoded"))
     }
 }
 
-fn read_u32(mem: &[u8], ptr: usize) -> u32 {
+fn read_u32(mem: &Memory, ptr: usize) -> Result<u32, wasmtime::MemoryAccessError> {
     let mut bytes: [u8; U32_LEN] = [0; U32_LEN];
-    bytes.copy_from_slice(&mem[ptr..(ptr + U32_LEN)]);
-    u32::from_le_bytes(bytes)
+    mem.read(ptr, &mut bytes).map(|_|
+        u32::from_le_bytes(bytes))
 }
 
-trait FromWasmMem {
-    fn from_wasm_mem(memory: &Memory, prt: usize) -> Self;
+trait FromWasmMem 
+where
+    Self: Sized,
+{
+    fn from_wasm_mem(memory: &Memory, prt: usize) -> Result<Self, wasmtime::MemoryAccessError>;
 }
 
 #[derive(Debug, Clone)]
@@ -243,19 +228,67 @@ struct AsObj {
     payload: Vec<u8>,
 }
 impl FromWasmMem for AsObj {
-    fn from_wasm_mem(memory: &Memory, ptr: usize) -> Self {
-        let mem = unsafe { memory.data_unchecked() };
-        let rt_size = read_u32(mem, ptr - 4) as usize;
+    fn from_wasm_mem(mem: &Memory, ptr: usize) -> Result<Self, wasmtime::MemoryAccessError> {
+        // Read AS header from behind initial pointer before reading payload
+        let mm_info = read_u32(mem, ptr - 20)?;
+        let gc_info = read_u32(mem, ptr - 16)?;
+        let gc_info2 = read_u32(mem, ptr - 12)?;
+        let rt_id = read_u32(mem, ptr - 8)?;
+        let rt_size = read_u32(mem, ptr - 4)? as usize;
 
-        AsObj {
-            mm_info: read_u32(mem, ptr - 20),
-            gc_info: read_u32(mem, ptr - 16),
-            gc_info2: read_u32(mem, ptr - 12),
-            rt_id: read_u32(mem, ptr - 8),
-            payload: (&mem[ptr..(ptr + rt_size)]).to_owned(),
-        }
+        // Read rt_size bytes from the ptr given to us.
+        // This is the actual data of the object and is opaque to us.
+        let payload = unsafe {
+            let mem = mem.data_unchecked();
+            (&mem[ptr..(ptr + rt_size)]).to_owned()
+        };
+
+        Ok(Self { mm_info, gc_info, gc_info2, rt_id, payload, })
     }
 }
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+struct TypeName(String);
+impl TypeName {
+    pub fn of<T>() -> Self {
+        Self(type_name::<T>().to_string())
+    }
+
+    // For types from wasm that do not have an innate type name
+    pub(crate) fn dynamic_name<S: ToString>(string: S) -> Self {
+        Self(string.to_string())
+    }
+}
+impl AsRef<str> for TypeName {
+    fn as_ref(&self) -> &str {
+        &self.0 
+    }
+}
+
+/*
+struct TypeRegistry {
+    registry: HashMap<TypeName, TypeId>
+}
+impl TypeRegistry {
+    fn register<T: 'static>(&mut self) {
+        let name = TypeName::of::<T>();
+
+        self.registry.entry(name).or_insert(TypeId::of::<T>());
+    }
+
+    fn dynamic_register(&mut self, name: TypeName, id: TypeId) {
+        self.registry.entry(name).or_insert(id);
+    }
+
+    fn get(&self, name: &TypeName) -> Option<&TypeId> {
+        self.registry.get(name)
+    }
+
+    fn as_map(&mut self) -> &mut HashMap<TypeName, TypeId> {
+        &mut self.registry
+    }
+}
+*/
 
 /*
 use std::any::Any;

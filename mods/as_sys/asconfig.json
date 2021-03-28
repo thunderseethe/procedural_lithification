@@ -17,6 +17,11 @@
     }
   },
   "options": {
-    "enable": ["reference-types", "gc"]
+    "enable": ["reference-types", "gc"],
+    "runtime": "stub",
+    "runPasses": ["flatten"],
+    "debug": true,
+    "exportRuntime": true,
+    "pedantic": true
    }
 }

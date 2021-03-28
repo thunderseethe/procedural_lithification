@@ -1,11 +1,7 @@
 // The entry file of your WebAssembly module.
 import "wasi";
-import { just_pressed as input_just_pressed, Vec3, Quat } from './interface';
-
-
-export function just_pressed(inp: externref): i32 {
-  return input_just_pressed(inp, 34);
-}
+import { Vec3, Quat } from './interface';
+import { log } from './console';
 
 //export interface FlyCamera {
 //  /// The speed the FlyCamera moves at. Defaults to `1.0`
@@ -38,6 +34,7 @@ export function just_pressed(inp: externref): i32 {
 //	enabled: bool,
 //}
 
+
 @unmanaged 
 class FlyCamera {
   constructor(
@@ -48,7 +45,6 @@ class FlyCamera {
 }
 
 function alloc_tuple<T>(name: String, val: T): usize {
-  //let name_utf8 = String.UTF8.encode(name, false);
   let name_ptr: usize = changetype<usize>(name);
   let val_ptr: usize = changetype<usize>(val);
   let tuple_ptr = memory.data(sizeof<usize>() * 2);
@@ -84,5 +80,14 @@ export function initialize(): usize {
 //}
 
 export function forward_vector(rot: Quat): Vec3 {
+  let s = "Quat(" + rot.getX().toString() + 
+  ", " + rot.getY().toString() + 
+  ", " + rot.getZ().toString() +
+  ", " + rot.getW().toString() + ")";
+  
   return rot.mul_vec3(Vec3.unit_z()).normalize();
+}
+
+export function alloc(size: usize): usize {
+  return heap.alloc(size);
 }
