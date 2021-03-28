@@ -1,7 +1,6 @@
 // The entry file of your WebAssembly module.
 import "wasi";
 import { Vec3, Quat } from './interface';
-import { log } from './console';
 
 //export interface FlyCamera {
 //  /// The speed the FlyCamera moves at. Defaults to `1.0`

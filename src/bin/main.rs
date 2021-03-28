@@ -1,6 +1,6 @@
 use std::{cell::RefCell, usize};
 use std::{
-    any::{type_name, TypeId},
+    any::type_name,
     sync::Arc,
     rc::Rc,
 };
@@ -44,29 +44,21 @@ fn main() -> anyhow::Result<()> {
         Module::from_file(engine.as_ref(), "./mods/as_sys/build/optimized.wasm")
     })?;
 
-    println!("Vec3.size({})", size_of::<Vec3>());
 
     use glam::f32::{Vec3, Quat};
     let instance_res: anyhow::Result<Instance> = LINKER.with(|linker| {
         let vec3_size = Global::new(linker.borrow().store(),
             GlobalType::new(ValType::I32, Mutability::Const),
             Val::I32(size_of::<Vec3>() as i32))?;
-
-        linker.borrow_mut().func("console", "log", 
-            |ctx: Caller<'_>, ptr: i32| -> () {
-                let mem = ctx.get_export("memory")
-                    .and_then(|ext| ext.into_memory())
-                    .expect("expected export \"memory\"");
-
-                let s = read_utf16_string(&mem, ptr as usize).unwrap();
-                println!("{}", s);
-            })?;
-
         linker.borrow_mut().define(
             "interface",
             "VEC3_SIZE",
             vec3_size)?;
 
+        let quat_size = Global::new(linker.borrow().store(),
+            GlobalType::new(ValType::I32, Mutability::Const),
+            Val::I32(size_of::<Quat>() as i32))?;
+        linker.borrow_mut().define("interface", "QUAT_SIZE", quat_size)?;
 
         linker.borrow_mut().func(
             "interface",
@@ -144,7 +136,7 @@ fn main() -> anyhow::Result<()> {
     let ptr = alloc.call(size_of::<Quat>() as i32)?;
 
     //let quat = Quat::IDENTITY;
-    let quat = Quat::from_axis_angle(Vec3::new(1.0, 0.0, 1.0), 1.0);
+    let quat = Quat::from_axis_angle(Vec3::new(1.0, 0.0, 1.0), 0.5);
     mem.write(ptr as usize, bytemuck::bytes_of(&quat))?;
 
     let q_ptr = alloc.call(size_of::<i32>() as i32)?;
