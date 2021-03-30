@@ -33,7 +33,6 @@ import { Vec3, Quat } from './interface';
 //	enabled: bool,
 //}
 
-
 @unmanaged 
 class FlyCamera {
   constructor(

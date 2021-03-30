@@ -11,7 +11,7 @@ use wasmtime::*;
 use wasmtime_wasi::snapshots::preview_1::Wasi;
 use std::mem::size_of;
 
-use interface::GlamCtx;
+use interface::{GlamCtx, WasmGlam};
 
 const U32_LEN: usize = std::mem::size_of::<u32>();
 
@@ -34,8 +34,10 @@ thread_local! {
             .inherit_stdio()
             .build().expect("couldn't construct WasiCtx")));
         let wasi = Wasi::new(&store, ctx);
+        let glam = WasmGlam::new(&store, Rc::new(RefCell::new(GlamCtx {})));
         let mut linker = Linker::new(&store);
         wasi.add_to_linker(&mut linker).expect("Failed to add wasi to linker");
+        glam.add_to_linker(&mut linker).expect("Failed to add glam to linker");
         RefCell::new(linker)
     });
 }

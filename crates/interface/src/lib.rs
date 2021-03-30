@@ -5,7 +5,6 @@ from_witx!({
     errors: { errno => InterfaceError }
 });
 
-
 wasmtime_integration!({
     target: crate,
     witx: ["./crates/interface/res/math.witx"],
@@ -17,6 +16,7 @@ wasmtime_integration!({
         },
     }
 });
+
 
 pub struct GlamCtx {}
 

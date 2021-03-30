@@ -1,3 +1,6 @@
 [submodule "bevy"]
 	path = bevy
 	url = https://github.com/bevyengine/bevy
+[submodule "crates/witx-bindgen/WASI"]
+	path = crates/witx-bindgen/WASI
+	url = https://github.com/WebAssembly/WASI.git
