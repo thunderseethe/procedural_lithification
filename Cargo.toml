@@ -16,8 +16,8 @@ name = "server"
 name = "main"
 
 [workspace]
-members = ["crates/*"]
-exclude = ["mods/", "bevy/", "wasi"]
+members = ["crates/*", "crates/witx-bindgen/WASI/tools/witx/cli"]
+exclude = ["mods/", "bevy/", "as-witx/", "crates/witx-bindgen"]
 
 [build-dependencies]
 which = "4.0.2"

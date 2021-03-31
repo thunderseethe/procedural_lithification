@@ -5,8 +5,8 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use witx::*;
 
-use crate::{record_contains_union, render_highlevel, to_rust_ident};
-
+use super::*;
+ 
 pub fn generate<P: AsRef<Path>>(with_paths: &[P]) -> String {
     let doc = witx::load(witx_paths).unwrap();
 
@@ -161,6 +161,21 @@ fn render_asc_highlevel(func: &InterfaceFunc, module: &Id, src: &mut String) {
     src.push_str("}");
 }
 
+struct AssemblyScript<'a> {
+    src: &'a mut String,
+    params: &'a [InterfaceFuncParam],
+    block_storage: Vec<String>,
+    blocks: Vec<String>,
+}
+
+impl Bindgen for AssemblyScript<'_> {
+    type Operand = String;
+
+    fn push_block(&mut self) {
+        
+    }
+}
+
 impl RenderAsc for InterfaceFunc {
     fn render_asc(&self, src: &mut String) {
         ascdoc(&self.docs, src);
@@ -258,7 +273,7 @@ fn ascdoc(docs: &str, dst: &mut String) {
     }
     dst.push_str("/**");
     for line in docs.lines() {
-        dst.push_str(" * ")
+        dst.push_str(" * ");
         dst.push_str(line);
         dst.push('\n');
     }
