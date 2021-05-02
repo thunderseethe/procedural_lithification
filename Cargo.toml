@@ -17,7 +17,7 @@ name = "main"
 
 [workspace]
 members = ["crates/*"]
-exclude = ["mods/", "bevy/", "wasi"]
+exclude = ["mods/", "bevy/"]
 
 [build-dependencies]
 which = "4.0.2"
@@ -35,7 +35,7 @@ uuid = { version = "0.8", features = ["v4"] }
 
 [dependencies.bevy]
 path = "./bevy"
-version = "0.4"
+version = "0.5"
 
 [dependencies.interface]
 path = "./crates/interface"
