@@ -89,3 +89,9 @@ export function forward_vector(rot: Quat): Vec3 {
 export function alloc(size: usize): usize {
   return heap.alloc(size);
 }
+
+export function test(): void {
+  let x: u64 = 1234;
+  let y: i32 = x as i32;
+  let z: u64 = x as u64;
+}
